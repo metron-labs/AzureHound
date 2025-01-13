@@ -59,6 +59,29 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           push: ${{ ! startsWith(github.event_name, 'pull_request') }}
 
+      - name: Configure AWS credentials
+        if: ${{ ! startsWith(github.event_name, 'pull_request') }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.ECR_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.ECR_AWS_SECRET_ACCESS_KEY }}
+          aws-region: 'us-east-1'
+
+      - name: Login to Amazon ECR
+        if: ${{ ! startsWith(github.event_name, 'pull_request') }}
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Retag and push image to Amazon ECR
+        if: ${{ ! startsWith(github.event_name, 'pull_request') }}
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: production/azurehound
+          IMAGE_TAG: 'edge'
+        run: |
+          docker image tag ghcr.io/bloodhoundad/azurehound:edge $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
   build:
     runs-on: ubuntu-latest
     defaults:
