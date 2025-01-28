@@ -39,7 +39,7 @@ jobs:
         uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ secrets.GHCR_USER }}
           password: ${{ secrets.PACKAGE_SCOPE }}
 
       - name: Configure AWS credentials
@@ -65,13 +65,15 @@ jobs:
             type=sha,prefix=edge-,format=short
 
       - name: Build Container Image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: .
           build-args: VERSION=v0.0.0-rolling+${{ github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           push: ${{ ! startsWith(github.event_name, 'pull_request') }}
+          secrets: |
+            GIT_AUTH_TOKEN=${{ secrets.PACKAGE_SCOPE }}
 
   build:
     runs-on: ubuntu-latest
