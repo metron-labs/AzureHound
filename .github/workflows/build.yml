@@ -65,7 +65,7 @@ jobs:
             type=sha,prefix=edge-,format=short
 
       - name: Build Container Image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: .
           build-args: VERSION=v0.0.0-rolling+${{ github.sha }}
