@@ -62,7 +62,7 @@ jobs:
         with:
           images: |
             ghcr.io/bloodhoundad/azurehound
-            ${{ steps.login-ecr.outputs.registry }}/production/azurehound
+            ${{ steps.login-ecr.outputs.registry || 'public.ecr.aws' }}/production/azurehound
           tags: |
             type=edge,branch=main
             type=sha,prefix=edge-,format=short
