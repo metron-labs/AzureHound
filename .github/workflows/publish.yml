@@ -76,7 +76,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},prefix=v
 
       - name: Build Container Image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: .
           build-args: VERSION=${{ github.ref_name }}
