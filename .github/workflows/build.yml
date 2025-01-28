@@ -40,7 +40,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.PACKAGE_SCOPE }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -72,6 +72,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           push: ${{ ! startsWith(github.event_name, 'pull_request') }}
+          secrets: |
+            GIT_AUTH_TOKEN=${{ secrets.PACKAGE_SCOPE }}
 
   build:
     runs-on: ubuntu-latest
