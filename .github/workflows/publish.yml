@@ -35,7 +35,7 @@ jobs:
           GOARCH: ${{ matrix.arch }}
 
       - name: Upload as Artifact
-        if: matrix.os == windows
+        if: matrix.os == "windows"
         uses: actions/upload-artifact@v4
         with:
           name: azurehound-bin-${{ matrix.os }}-${{ matrix.arch }}
