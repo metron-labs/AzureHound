@@ -80,6 +80,9 @@ jobs:
           CODE_SIGN_KEY: ${{ secrets.CODE_SIGN_KEY }}
         run: |
           set -ex
+          echo "DEBUG: script $0:"
+          cat "$0"
+          echo "DEBUG: end"
           mkdir signed
           for artifact in unsigned/azurehound-bin-*/azurehound*; do
             tgt=$(echo "$artifact" | sed -E 's%.*-([^-]*)/azurehound(.*)%azurehound-\1\2%')
