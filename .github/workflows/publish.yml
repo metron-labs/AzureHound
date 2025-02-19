@@ -79,15 +79,16 @@ jobs:
           CODE_SIGN_CHAIN: ${{ secrets.CODE_SIGN_CHAIN }}
           CODE_SIGN_KEY: ${{ secrets.CODE_SIGN_KEY }}
         run: |
+          set -ex
           mkdir signed
           for artifact in unsigned/azurehound-bin-*/azurehound*; do
             tgt=$(echo "$artifact" | sed -E 's%.*-([^-]*)/azurehound(.*)%azurehound-\1\2%')
             osslsigncode sign \
               -certs <(printenv CODE_SIGN_CHAIN) \
               -key <(printenv CODE_SIGN_KEY) \
-              -n AzureHound
-              -i https://www.specterops.io/
-              -in "$artifact"
+              -n AzureHound \
+              -i https://www.specterops.io/ \
+              -in "$artifact" \
               -out "signed/${tgt}"
           done
 
