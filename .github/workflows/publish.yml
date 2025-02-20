@@ -84,8 +84,8 @@ jobs:
           # osslsigncode demands certs and key as file
           CERT_FILE=$(mktemp)
           KEY_FILE=$(mktemp)
-          echo "${{ secrets.CODE_SIGN_CHAIN }}" > $CERT_FILE
-          echo "${{ secrets.CODE_SIGN_KEY }}" > $KEY_FILE
+          printenv CODE_SIGN_CHAIN > $CERT_FILE
+          printenv CODE_SIGN_KEY > $KEY_FILE
 
           trap 'rm $CERT_FILE $KEY_FILE' EXIT
 
