@@ -80,15 +80,21 @@ jobs:
           CODE_SIGN_KEY: ${{ secrets.CODE_SIGN_KEY }}
         run: |
           set -ex
-          echo "DEBUG: script $0:"
-          cat "$0"
-          echo "DEBUG: end"
+
+          # osslsigncode demands certs and key as file
+          CERT_FILE=$(mktemp)
+          KEY_FILE=$(mktemp)
+          echo "${{ secrets.CODE_SIGN_CHAIN }}" > $CERT_FILE
+          echo "${{ secrets.CODE_SIGN_KEY }}" > $KEY_FILE
+
+          trap 'rm $CERT_FILE $KEY_FILE' EXIT
+
           mkdir signed
           for artifact in unsigned/azurehound-bin-*/azurehound*; do
             tgt=$(echo "$artifact" | sed -E 's%.*-([^-]*)/azurehound(.*)%azurehound-\1\2%')
             osslsigncode sign \
-              -certs <(printenv CODE_SIGN_CHAIN) \
-              -key <(printenv CODE_SIGN_KEY) \
+              -certs $CERT_FILE \
+              -key $KEY_FILE \
               -n AzureHound \
               -i https://www.specterops.io/ \
               -in "$artifact" \
