@@ -140,6 +140,10 @@ jobs:
           mkdir zipped
           7z a -tzip -mx9 zipped/${{ env.FILE_NAME }}.zip signed/*
 
+      - name: Checksum Zipped Files
+        run: |
+          sha256sum zipped/${{ env.FILE_NAME }}.zip > zipped/${{ env.FILE_NAME }}.zip.sha256
+
       - name: Upload Artifacts to S3
         run: |
           aws s3 cp --recursive zipped/ s3://${{ secrets.BHE_AWS_BUCKET }}
