@@ -17,6 +17,8 @@
 
 package azure
 
+import "encoding/json"
+
 type RoleManagementPolicyAssignment struct {
 	Entity
 	PolicyId         string `json:"policyId,omitempty"`
@@ -34,14 +36,15 @@ type RoleManagementPolicyAssignment struct {
 }
 
 type RoleManagementPolicy struct {
-	Id                    string `json:"id,omitempty"`
-	DisplayName           string `json:"displayName,omitempty"`
-	Description           string `json:"description,omitempty"`
-	IsOrganizationDefault bool   `json:"isOrganizationDefault,omitempty"`
-	ScopeId               string `json:"scopeId,omitempty"`
-	ScopeType             string `json:"scopeType,omitempty"`
-	LastModifiedDateTime  string `json:"lastModifiedDateTime,omitempty"`
-	LastModifiedBy        string `json:"lastModifiedBy,omitempty"`
+	Id                    string          `json:"id,omitempty"`
+	DisplayName           string          `json:"displayName,omitempty"`
+	Description           string          `json:"description,omitempty"`
+	IsOrganizationDefault bool            `json:"isOrganizationDefault,omitempty"`
+	ScopeId               string          `json:"scopeId,omitempty"`
+	ScopeType             string          `json:"scopeType,omitempty"`
+	LastModifiedDateTime  string          `json:"lastModifiedDateTime,omitempty"`
+	LastModifiedBy        string          `json:"lastModifiedBy,omitempty"`
+	Rules                 json.RawMessage `json:"rules,omitempty"`
 }
 
 type UnifiedRoleManagementPolicyExpirationRule struct {
