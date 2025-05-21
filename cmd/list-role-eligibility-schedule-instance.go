@@ -58,7 +58,7 @@ func listRoleEligibilityScheduleInstances(ctx context.Context, client client.Azu
 				log.V(2).Info("found unified role eligibility instance schedule", "unifiedRoleEligibilitySchedule", item)
 				count++
 				result := item.Ok
-				if ok := pipeline.SendAny(ctx.Done(), out, AzureWrapper{
+				if ok := pipeline.SendAny(ctx.Done(), out, azureWrapper[models.RoleEligibilityScheduleInstance]{
 					Kind: enums.KindAZRoleEligibilityScheduleInstance,
 					Data: models.RoleEligibilityScheduleInstance{
 						Id:               result.Id,

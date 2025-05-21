@@ -25,8 +25,6 @@ import (
 	"github.com/bloodhoundad/azurehound/v2/models/azure"
 )
 
-//go:generate go run http://go.uber.org/mock/mockgen  -destination=./mocks/client.go -package=mocks . AzureRoleManagementClient
-
 type AzureRoleManagementClient interface {
 	ListAzureUnifiedRoleEligibilityScheduleInstances(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.UnifiedRoleEligibilityScheduleInstance]
 }
