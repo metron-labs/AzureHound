@@ -46,15 +46,14 @@ func listUnifiedRoleEligibilityScheduleInstancesCmdImpl(cmd *cobra.Command, args
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, os.Kill)
 	defer gracefulShutdown(stop)
 
-	log.V(1).Info("testing connections")
 	azClient := connectAndCreateClient()
-	log.Info("collecting azure unified role eligibility schedule instances")
+	log.V(1).Info("collecting azure unified role eligibility schedule instances")
 	start := time.Now()
 	stream := listRoleEligibilityScheduleInstances(ctx, azClient)
 	panicrecovery.HandleBubbledPanic(ctx, stop, log)
 	outputStream(ctx, stream)
 	duration := time.Since(start)
-	log.Info("collection completed", "duration", duration.String())
+	log.V(1).Info("collection completed", "duration", duration.String())
 }
 
 func listRoleEligibilityScheduleInstances(ctx context.Context, client client.AzureClient) <-chan interface{} {
@@ -90,7 +89,7 @@ func listRoleEligibilityScheduleInstances(ctx context.Context, client client.Azu
 				}
 			}
 		}
-		log.Info("finished listing unified role eligibility schedule instances")
+		log.V(1).Info("finished listing unified role eligibility schedule instances", "count", count)
 	}()
 
 	return out
