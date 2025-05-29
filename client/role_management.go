@@ -17,8 +17,6 @@
 
 package client
 
-//go:generate go run http://go.uber.org/mock/mockgen  -destination=./mocks/client.go -package=mocks . AzureRoleManagementClient
-
 import (
 	"context"
 	"fmt"
@@ -50,7 +48,7 @@ func (s *azureClient) ListAzureUnifiedRoleEligibilityScheduleInstances(ctx conte
 // This endpoint requires the RoleManagement.Read.All permission
 // https://learn.microsoft.com/en-us/graph/permissions-reference#rolemanagementreadall
 // Endpoint documentation: https://learn.microsoft.com/en-us/graph/api/policyroot-list-rolemanagementpolicyassignments?view=graph-rest-1.0&tabs=http
-func (s azureClient) ListRoleAssignmentPolicies(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.UnifiedRoleManagementPolicyAssignment] {
+func (s *azureClient) ListRoleAssignmentPolicies(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.UnifiedRoleManagementPolicyAssignment] {
 	var (
 		out  = make(chan AzureResult[azure.UnifiedRoleManagementPolicyAssignment])
 		path = fmt.Sprintf("/%s/policies/roleManagementPolicyAssignments", constants.GraphApiVersion)
