@@ -24,13 +24,13 @@ func init() {
 }
 
 var listRoleAssignmentPoliciesCmd = &cobra.Command{
-	Use:          "role-assignment-policies",
-	Short:        "Lists Role Assignment Policies",
-	Run:          listRoleAssignmentPoliciesCmdImpl,
+	Use:          "unified-role-assignment-policies",
+	Short:        "Lists Unified Role Assignment Policies",
+	Run:          listUnifiedRoleAssignmentPoliciesCmdImpl,
 	SilenceUsage: true,
 }
 
-func listRoleAssignmentPoliciesCmdImpl(cmd *cobra.Command, args []string) {
+func listUnifiedRoleAssignmentPoliciesCmdImpl(cmd *cobra.Command, args []string) {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, os.Kill)
 	setupLogger()
 	defer gracefulShutdown(stop)
