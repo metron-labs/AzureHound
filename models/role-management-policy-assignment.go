@@ -17,9 +17,11 @@
 
 package models
 
+import "github.com/bloodhoundad/azurehound/v2/models/azure"
+
 type RoleManagementPolicyAssignment struct {
-	Id                                                string   `json:"id,omitempty"`
-	RoleDefinitionId                                  string   `json:"roleDefinitionId,omitempty"`
+	azure.UnifiedRoleManagementPolicyAssignment
+
 	EndUserAssignmentRequiresApproval                 bool     `json:"endUserAssignmentRequiresApproval,omitempty"`
 	EndUserAssignmentRequiresCAPAuthenticationContext bool     `json:"endUserAssignmentRequiresCAPAuthenticationContext,omitempty"`
 	EndUserAssignmentUserApprovers                    []string `json:"endUserAssignmentUserApprovers,omitempty"`
@@ -27,5 +29,4 @@ type RoleManagementPolicyAssignment struct {
 	EndUserAssignmentRequiresMFA                      bool     `json:"endUserAssignmentRequiresMFA,omitempty"`
 	EndUserAssignmentRequiresJustification            bool     `json:"endUserAssignmentRequiresJustification,omitempty"`
 	EndUserAssignmentRequiresTicketInformation        bool     `json:"endUserAssignmentRequiresTicketInformation,omitempty"`
-	TenantId                                          string   `json:"tenantId,omitempty"`
 }
