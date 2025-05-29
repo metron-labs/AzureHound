@@ -193,8 +193,6 @@ type AzureGraphClient interface {
 }
 
 type AzureResourceManagerClient interface {
-	AzureRoleManagementClient
-
 	GetAzureADTenants(ctx context.Context, includeAllTenantCategories bool) (azure.TenantList, error)
 
 	ListRoleAssignmentsForResource(ctx context.Context, resourceId string, filter, tenantId string) <-chan AzureResult[azure.RoleAssignment]
