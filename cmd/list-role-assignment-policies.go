@@ -71,6 +71,9 @@ func listRoleAssignmentPolicies(ctx context.Context, azClient client.AzureClient
 					log.Error(err, err.Error())
 					continue
 				}
+
+				formattedItem.TenantId = azClient.TenantInfo().TenantId
+
 				log.V(2).Info("found role assignment policy", "item", formattedItem)
 				count++
 
@@ -93,10 +96,13 @@ type tempRuleType struct {
 	Type enums.RoleManagementPolicyRuleType `json:"@odata.type"`
 }
 
-// unmarshallPolicyRules takes a reference to a UnifiedRoleManagementPolicyAssignment and unmarshalls the model's Policy.Rules into their respective types
+// formatRoleManagementPolicyAssignment takes a reference to a UnifiedRoleManagementPolicyAssignment and unmarshalls the model's Policy.Rules into their respective types
 func formatRoleManagementPolicyAssignment(assignment azure.UnifiedRoleManagementPolicyAssignment) (models.RoleManagementPolicyAssignment, error) {
 	rmPolicyAssignment := models.RoleManagementPolicyAssignment{
 		UnifiedRoleManagementPolicyAssignment: assignment,
+
+		Id:               assignment.Id,
+		RoleDefinitionId: assignment.RoleDefinitionId,
 	}
 
 	rules := assignment.Policy.Rules
@@ -135,14 +141,16 @@ func unmarshallPolicyRuleApproval(data json.RawMessage, rmPolicyAssignment *mode
 		return fmt.Errorf("error unmarshalling PolicyRuleApproval: %w", err)
 	}
 
-	var userApprovers []string
-	var groupApprovers []string
+	var (
+		userApprovers  []string
+		groupApprovers []string
+	)
+
 	for _, approvalStage := range rule.Setting.ApprovalStages {
 		for _, approver := range approvalStage.PrimaryApprovers {
 			switch approver.Type {
 			case enums.ApprovalStageSingleUser:
 				userApprovers = append(userApprovers, approver.UserId)
-				break
 			case enums.ApprovalStageGroupMembers:
 				groupApprovers = append(groupApprovers, approver.GroupId)
 			}
