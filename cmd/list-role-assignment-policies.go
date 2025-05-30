@@ -32,7 +32,6 @@ var listRoleAssignmentPoliciesCmd = &cobra.Command{
 
 func listUnifiedRoleAssignmentPoliciesCmdImpl(cmd *cobra.Command, args []string) {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, os.Kill)
-	setupLogger()
 	defer gracefulShutdown(stop)
 
 	var (
