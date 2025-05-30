@@ -57,7 +57,7 @@ func listRoleAssignmentPolicies(ctx context.Context, azClient client.AzureClient
 		defer close(out)
 
 		count := 0
-		log.Info("collecting azure ad objects...")
+		log.Info("collecting azure unified role assignment policies...")
 		for item := range azClient.ListRoleAssignmentPolicies(ctx, query.GraphParams{
 			Filter: "scopeId eq '/' and scopeType eq 'Directory'",
 			Expand: "policy($expand=rules)",
@@ -74,7 +74,7 @@ func listRoleAssignmentPolicies(ctx context.Context, azClient client.AzureClient
 
 				formattedItem.TenantId = azClient.TenantInfo().TenantId
 
-				log.V(2).Info("found role assignment policy", "item", formattedItem)
+				log.V(2).Info("found unified role assignment policy", "unifiedRoleAssignmentPolicy", formattedItem)
 				count++
 
 				if ok := pipeline.SendAny(ctx.Done(), out, azureWrapper[models.RoleManagementPolicyAssignment]{
