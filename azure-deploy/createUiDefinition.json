@@ -1,0 +1,157 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "basics": [],
+    "steps": [
+      {
+        "name": "azureHoundConfig",
+        "label": "AzureHound Config Params",
+        "elements": [
+          {
+            "name": "resourceGroupName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Resource Group Name",
+            "defaultValue": "",
+            "toolTip": "Enter the name of the resource group.",
+            "placeholder": "Enter the name of the resource group.",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9-_\\.]{1,90}$",
+              "validationMessage": "Enter a valid resource group name (alphanumeric, dashes, dots, underscores, max 90 characters)."
+            }
+          },
+          {
+            "name": "location",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Location",
+            "defaultValue": "",
+            "toolTip": "Azure region (e.g., eastus, westus2)",
+            "placeholder": "Azure region (e.g., eastus, westus2)",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-z0-9]+$",
+              "validationMessage": "Location must be lowercase and contain no spaces."    
+            }
+          },
+          {
+            "name": "containerUMIName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Container UMI Name",
+            "defaultValue": "",
+            "toolTip": "Name of the Container User-Assigned Managed Identity",
+            "placeholder": "Name of the Container User-Assigned Managed Identity",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9-_]{1,90}$",
+              "validationMessage": "Enter a valid user-assigned identity name."
+            }
+          },
+          {
+            "name": "containerUMIResourceGroupName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Container UMI Resource Group Name",
+            "defaultValue": "",
+            "toolTip": "Resource group name for the Container UMI",
+            "placeholder": "Resource group name for the Container UMI",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9-_\\.]{1,90}$",
+              "validationMessage": "Enter a valid resource group name."
+            }
+          },
+          {
+            "name": "deploymentUMIName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Deployment UMI Name",
+            "defaultValue": "",
+            "toolTip": "Name of the Deployment User-Assigned Managed Identity",
+            "placeholder": "Name of the Deployment User-Assigned Managed Identity",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9-_]{1,90}$",
+              "validationMessage": "Enter a valid identity name."
+            }
+          },
+          {
+            "name": "deploymentUMIResourceGroupName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Deployment UMI Resource Group Name",
+            "defaultValue": "",
+            "toolTip": "Resource group name for the Deployment UMI",
+            "placeholder": "Resource group name for the Deployment UMI",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9-_\\.]{1,90}$",
+              "validationMessage": "Enter a valid resource group name."
+            }
+          },
+          {
+            "name": "azureTenantId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Azure Tenant ID",
+            "defaultValue": "",
+            "toolTip": "Azure Tenant ID",
+            "placeholder": "Azure Tenant ID",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F-]{36}$",
+              "validationMessage": "Must be a valid GUID"
+            }
+          },
+          {
+            "name": "bloodhoundInstanceDomain",
+            "type": "Microsoft.Common.TextBox",
+            "label": "BloodHound Instance Domain",
+            "defaultValue": "",
+            "toolTip": "Domain name of the BloodHound instance",
+            "placeholder": "Domain name of the BloodHound instance",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9.-]+$",
+              "validationMessage": "Enter a valid domain (e.g., example.com )."
+            }
+          },
+          {
+            "name": "bloodhoundTokenId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "BloodHound Token ID",
+            "defaultValue": "",
+            "toolTip": "The BloodHound Token Id",
+            "placeholder": "The BloodHound Token Id",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9-_]+$",
+              "validationMessage": "Token ID must be alphanumeric."
+            }
+          },
+          {
+            "name": "bloodhoundToken",
+            "type": "Microsoft.Common.TextBox",
+            "label": "BloodHound Token Secret",
+            "toolTip": "The secret Key of the BloodHound token",
+            "placeholder": "The BloodHound Token Key",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9-_]+$",
+              "validationMessage": "Token must be alphanumeric."
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "resourceGroupName": "[steps('azureHoundConfig').resourceGroupName]",
+      "location": "[steps('azureHoundConfig').location()]",
+      "containerUMIName": "[steps('azureHoundConfig').containerUMIName]",
+      "containerUMIResourceGroupName": "[steps('azureHoundConfig').containerUMIResourceGroupName]",
+      "deploymentUMIName": "[steps('azureHoundConfig').deploymentUMIName]",
+      "deploymentUMIResourceGroupName": "[steps('azureHoundConfig').deploymentUMIResourceGroupName]",
+      "azureTenantId": "[steps('azureHoundConfig').azureTenantId]",
+      "bloodhoundInstanceDomain": "[steps('azureHoundConfig').bloodhoundInstanceDomain]",
+      "bloodhoundTokenId": "[steps('azureHoundConfig').bloodhoundTokenId]",
+      "bloodhoundToken": "[steps('azureHoundConfig').bloodhoundToken]"
+    }
+  }
+}
