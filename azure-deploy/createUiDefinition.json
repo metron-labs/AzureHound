@@ -143,7 +143,7 @@
     ],
     "outputs": {
       "resourceGroupName": "[steps('azureHoundConfig').resourceGroupName]",
-      "location": "[steps('azureHoundConfig').location()]",
+      "location": "[steps('azureHoundConfig').location]",
       "containerUMIName": "[steps('azureHoundConfig').containerUMIName]",
       "containerUMIResourceGroupName": "[steps('azureHoundConfig').containerUMIResourceGroupName]",
       "deploymentUMIName": "[steps('azureHoundConfig').deploymentUMIName]",
