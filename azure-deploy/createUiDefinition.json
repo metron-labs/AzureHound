@@ -10,6 +10,19 @@
         "label": "AzureHound Config Params",
         "elements": [
           {
+            "name": "resourceGroupName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Resource Group Name",
+            "defaultValue": "",
+            "toolTip": "Enter the name of the resource group.",
+            "placeholder": "Enter the name of the resource group.",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-zA-Z0-9-_\\.]{1,90}$",
+              "validationMessage": "Enter a valid resource group name (alphanumeric, dashes, dots, underscores, max 90 characters)."
+            }
+          },
+          {
             "name": "location",
             "type": "Microsoft.Common.TextBox",
             "label": "Location",
@@ -129,7 +142,8 @@
       }
     ],
     "outputs": {
-      "location": "[steps('azureHoundConfig').location]",
+      "resourceGroupName": "[steps('azureHoundConfig').resourceGroupName]",
+      "location": "[steps('azureHoundConfig').location()]",
       "containerUMIName": "[steps('azureHoundConfig').containerUMIName]",
       "containerUMIResourceGroupName": "[steps('azureHoundConfig').containerUMIResourceGroupName]",
       "deploymentUMIName": "[steps('azureHoundConfig').deploymentUMIName]",
