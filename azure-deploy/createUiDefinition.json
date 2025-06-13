@@ -10,19 +10,6 @@
         "label": "AzureHound Config Params",
         "elements": [
           {
-            "name": "resourceGroupName",
-            "type": "Microsoft.Common.TextBox",
-            "label": "Resource Group Name",
-            "defaultValue": "",
-            "toolTip": "Enter the name of the resource group.",
-            "placeholder": "Enter the name of the resource group.",
-            "constraints": {
-              "required": true,
-              "regex": "^[a-zA-Z0-9-_\\.]{1,90}$",
-              "validationMessage": "Enter a valid resource group name (alphanumeric, dashes, dots, underscores, max 90 characters)."
-            }
-          },
-          {
             "name": "location",
             "type": "Microsoft.Common.TextBox",
             "label": "Location",
@@ -109,8 +96,8 @@
             "placeholder": "Domain name of the BloodHound instance",
             "constraints": {
               "required": true,
-              "regex": "^[a-zA-Z0-9.-]+$",
-              "validationMessage": "Enter a valid domain (e.g., example.com )."
+              "regex": "^.+$", 
+              "validationMessage": "Enter a valid domain (e.g, example.com )."
             }
           },
           {
@@ -134,7 +121,7 @@
             "placeholder": "The BloodHound Token Key",
             "constraints": {
               "required": true,
-              "regex": "^[a-zA-Z0-9-_]+$",
+              "regex": "^.+$",
               "validationMessage": "Token must be alphanumeric."
             }
           }
@@ -142,8 +129,7 @@
       }
     ],
     "outputs": {
-      "resourceGroupName": "[steps('azureHoundConfig').resourceGroupName]",
-      "location": "[steps('azureHoundConfig').location()]",
+      "location": "[steps('azureHoundConfig').location]",
       "containerUMIName": "[steps('azureHoundConfig').containerUMIName]",
       "containerUMIResourceGroupName": "[steps('azureHoundConfig').containerUMIResourceGroupName]",
       "deploymentUMIName": "[steps('azureHoundConfig').deploymentUMIName]",
