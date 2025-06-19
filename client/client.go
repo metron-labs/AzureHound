@@ -225,16 +225,9 @@ type AzureClient interface {
 
 	// Add Intune methods
 	ListIntuneManagedDevices(ctx context.Context, params query.GraphParams) <-chan AzureResult[intune.ManagedDevice]
-	// ExecuteIntuneScript(ctx context.Context, deviceId string, scriptContent string, runAsAccount string) <-chan AzureResult[intune.ScriptExecution]
-	// GetIntuneScriptResults(ctx context.Context, scriptId string, params query.GraphParams) <-chan AzureResult[intune.ScriptResult]
 	GetIntuneDeviceCompliance(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[intune.ComplianceState]
 	GetIntuneDeviceConfiguration(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[intune.ConfigurationState]
-	// ListIntuneDeviceManagementScripts(ctx context.Context, params query.GraphParams) <-chan AzureResult[intune.DeviceManagementScript]
 	
-	// High-level collection methods
-	// CollectIntuneRegistryData(ctx context.Context, deviceIds []string) <-chan AzureResult[intune.RegistryCollectionResult]
-	// CollectIntuneLocalGroups(ctx context.Context, deviceIds []string) <-chan AzureResult[intune.LocalGroupResult]
-	// CollectIntuneUserRights(ctx context.Context, deviceIds []string) <-chan AzureResult[intune.UserRightsResult]
 }
 
 func (s azureClient) TenantInfo() azure.Tenant {
