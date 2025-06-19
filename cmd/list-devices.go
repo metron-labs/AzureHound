@@ -35,7 +35,7 @@ import (
 func init() {
 	listRootCmd.AddCommand(listDevicesCmd)
 	listRootCmd.AddCommand(listIntuneDevicesCmd)
-    listRootCmd.AddCommand(collectIntuneDataCmd)
+    // listRootCmd.AddCommand(collectIntuneDataCmd)
 }
 
 var listDevicesCmd = &cobra.Command{

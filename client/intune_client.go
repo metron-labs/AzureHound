@@ -22,14 +22,14 @@ type IntuneClient interface {
 	GetIntuneDeviceConfiguration(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[intune.ConfigurationState]
 	
 	// Script Management
-	ListIntuneDeviceManagementScripts(ctx context.Context, params query.GraphParams) <-chan AzureResult[intune.DeviceManagementScript]
-	ExecuteIntuneScript(ctx context.Context, deviceId string, scriptContent string, runAsAccount string) <-chan AzureResult[intune.ScriptExecution]
-	GetIntuneScriptResults(ctx context.Context, scriptId string, params query.GraphParams) <-chan AzureResult[intune.ScriptResult]
+	// ListIntuneDeviceManagementScripts(ctx context.Context, params query.GraphParams) <-chan AzureResult[intune.DeviceManagementScript]
+	// ExecuteIntuneScript(ctx context.Context, deviceId string, scriptContent string, runAsAccount string) <-chan AzureResult[intune.ScriptExecution]
+	// GetIntuneScriptResults(ctx context.Context, scriptId string, params query.GraphParams) <-chan AzureResult[intune.ScriptResult]
 	
 	// Data Collection
-	CollectIntuneRegistryData(ctx context.Context, deviceIds []string) <-chan AzureResult[intune.RegistryCollectionResult]
-	CollectIntuneLocalGroups(ctx context.Context, deviceIds []string) <-chan AzureResult[intune.LocalGroupResult]
-	CollectIntuneUserRights(ctx context.Context, deviceIds []string) <-chan AzureResult[intune.UserRightsResult]
+	// CollectIntuneRegistryData(ctx context.Context, deviceIds []string) <-chan AzureResult[intune.RegistryCollectionResult]
+	// CollectIntuneLocalGroups(ctx context.Context, deviceIds []string) <-chan AzureResult[intune.LocalGroupResult]
+	// CollectIntuneUserRights(ctx context.Context, deviceIds []string) <-chan AzureResult[intune.UserRightsResult]
 }
 
 // Extend the existing AzureClient interface to include Intune methods
