@@ -189,6 +189,12 @@
               }
             ]
           },
+          "secrets": [
+            {
+              "name": "configjson",
+              "value": "[base64(string(variables('config')))]"
+            }
+          ],
           "registries": [
             {
               "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName')))]",
@@ -208,7 +214,7 @@
                 ],
                 "volumeMounts": [
                   {
-                    "name": "config-volume",
+                    "volumeName": "config-volume",
                     "mountPath": "/home/nonroot/.config/azurehound"
                   }
                 ],
@@ -222,9 +228,12 @@
             {
               "name": "config-volume",
               "storageType": "Secret",
-              "secret": {
-                "config.json": "[base64(string(variables('config')))]"
-              }
+              "secrets": [
+                {
+                  "secretRef": "configjson",
+                  "path": "config.json"
+                }
+              ]
             }
           ],
           "scale": {
