@@ -93,9 +93,9 @@
   },
   "variables": {
     "acrPullRole": "[resourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
-    "config": {
+    "configcontent": {
         "batchsize": 100,
-		    "config": "/home/nonroot/.config/azurehound/config.json",
+		    "config": "/mnt/config/config.json",
         "instance": "[format('https://{0}/', parameters('bloodhoundInstanceDomain'))]",
         "json": false,
         "managed-identity": true,
@@ -107,7 +107,11 @@
         "token": "[parameters('bloodhoundToken')]",
         "tokenid": "[parameters('bloodhoundTokenId')]",
         "verbosity": 0
-      }
+      },
+      "fileShareVolumeName": "config-volume", // Internal name for the volume
+      "storageMountName": "azure-files-config-storage", // Name of the storage link in the environment
+      "storageAccountName": "azstorageaccname",
+      "fileShareName": "azfilesharename"
     },
   "resources": [
     {
@@ -165,6 +169,45 @@
       }
     },
     {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2023-01-01",
+      "name": "[concat(variables('storageAccountName'), '/default/', variables('fileShareName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": {
+        "shareQuota": 8 // 8MB, adjust as needed
+      }
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments/storages",
+      "apiVersion": "2024-03-01",
+      "name": "[concat(parameters('containerAppEnvName'), '/', variables('storageMountName'))]",
+      "properties": {
+        "azureFile": {
+          "accountName": "[variables('storageAccountName')]",
+          "accountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value]",
+          "shareName": "[variables('fileShareName')]",
+          "accessMode": "ReadWrite"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppEnvName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('fileShareName'))]"
+      ]
+    },
+    {
       "type": "Microsoft.App/containerApps",
       "apiVersion": "2022-06-01-preview",
       "name": "[parameters('containerAppName')]",
@@ -189,12 +232,6 @@
               }
             ]
           },
-          "secrets": [
-            {
-              "name": "configjson",
-              "value": "[base64(string(variables('config')))]"
-            }
-          ],
           "registries": [
             {
               "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName')))]",
@@ -203,19 +240,22 @@
           ]
         },
         "template": {
-          "revisionSuffix": "firstrevision",
+          "revisionSuffix": "revision240612",
           "containers": [
             {
               "name": "[parameters('containerAppName')]",
               "image": "[reference(resourceId('Microsoft.Resources/deployments', 'importContainerImage')).outputs.importedImages.value[0].acrHostedImage]",
               "command": [
-                  "/azurehound",
-                  "start"
+                "/bin/sh"], // Or "/bin/sh" if bash is not available
+              "args": [
+                "-c",
+                "[concat('echo ', base64(string(variables('configcontent'))), ' > /mnt/config/config.json && azurehound start -c /mnt/config/config.json && tail -f /dev/null')]"
+//              "[concat('echo ', base64(string(variables('configcontent'))), ' > /mnt/config/config.json && tail -f /dev/null')]" //Use this to Debug the container
                 ],
                 "volumeMounts": [
                   {
-                    "volumeName": "config-volume",
-                    "mountPath": "/home/nonroot/.config/azurehound"
+                    "volumeName": "[variables('fileShareVolumeName')]",
+                    "mountPath": "/mnt/config"
                   }
                 ],
                 "resources": {
@@ -226,14 +266,9 @@
           ],
 		      "volumes": [
             {
-              "name": "config-volume",
-              "storageType": "Secret",
-              "secrets": [
-                {
-                  "secretRef": "configjson",
-                  "path": "config.json"
-                }
-              ]
+              "name": "[variables('fileShareVolumeName')]",
+              "storageType": "AzureFile",
+              "storageName": "[variables('storageMountName')]"
             }
           ],
           "scale": {
@@ -256,7 +291,8 @@
         "[resourceId('Microsoft.Resources/deployments', 'acr')]",
         "[resourceId('Microsoft.Resources/deployments', 'importContainerImage')]",
         "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppEnvName'))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName')))]"
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName')))]",
+        "[resourceId('Microsoft.App/managedEnvironments/storages', parameters('containerAppEnvName'), variables('storageMountName'))]"
       ]
     },
     {
