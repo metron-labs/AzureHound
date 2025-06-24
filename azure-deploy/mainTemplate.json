@@ -93,21 +93,9 @@
   },
   "variables": {
     "acrPullRole": "[resourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
-    "configcontent": {
-        "batchsize": 100,
-		    "config": "/mnt/config/config.json",
-        "instance": "[format('https://{0}/', parameters('bloodhoundInstanceDomain'))]",
-        "json": false,
-        "managed-identity": true,
-        "maxconnsperhost": 20,
-        "maxidleconnsperhost": 20,
-        "region": "cloud",
-        "streamcount": 25,
-        "tenant": "[parameters('azureTenantId')]",
-        "token": "[parameters('bloodhoundToken')]",
-        "tokenid": "[parameters('bloodhoundTokenId')]",
-        "verbosity": 0
-      },
+    "configcontent": "[concat('{\\\"batchsize\\\": 100,\\\"config\\\": \\\"/mnt/config/config.json\\\",\\\"instance\\\": \\\"https://', parameters('bloodhoundInstanceDomain'), '\\\",\\\"json\\\": false,\\\"managed-identity\\\": true,\\\"maxconnsperhost\\\": 20,\\\"maxidleconnsperhost\\\": 20,\\\"region\\\": \\\"cloud\\\",\\\"streamcount\\\": 25,\\\"tenant\\\": \\\"', parameters('azureTenantId'),'\\\",\\\"token\\\": \\\"', parameters('bloodhoundToken'),'\\\",\\\"tokenid\\\": \\\"', parameters('bloodhoundTokenId'),'\\\",\\\"verbosity\\\": 2}'
+    )]",
+    
       "fileShareVolumeName": "config-volume", // Internal name for the volume
       "storageMountName": "azure-files-config-storage", // Name of the storage link in the environment
       "storageAccountName": "azstorageaccname",
@@ -240,17 +228,40 @@
           ]
         },
         "template": {
-          "revisionSuffix": "revision240612",
+          "revisionSuffix": "revision240622",
+          "initContainers": [
+            {
+              "name": "config-writer",
+              "image": "mcr.microsoft.com/azure-cli:latest", // A lightweight image with bash for scripting
+              "command": [
+                "bash",
+                "-c"
+              ],
+              "args": [
+                // Construct the JSON using environment variables populated from Container variable
+                "[concat('echo ', variables('configcontent'), ' > /mnt/config/config.json')]",
+                // Add a confirmation message to logs
+                "echo 'config.json created successfully in /mnt/config/'"
+              ],
+              "volumeMounts": [
+                {
+                  "mountPath": "/mnt/config", // Mount the volume here for the init container to write to
+                  "volumeName": "config-volume"
+                }
+              ]
+            }
+          ],
           "containers": [
             {
               "name": "[parameters('containerAppName')]",
               "image": "[reference(resourceId('Microsoft.Resources/deployments', 'importContainerImage')).outputs.importedImages.value[0].acrHostedImage]",
               "command": [
-                "/bin/sh"], // Or "/bin/sh" if bash is not available
+                "/azurehound",
+                "start"
+                ],
               "args": [
                 "-c",
-                "[concat('echo ', base64(string(variables('configcontent'))), ' > /mnt/config/config.json && azurehound start -c /mnt/config/config.json && tail -f /dev/null')]"
-//              "[concat('echo ', base64(string(variables('configcontent'))), ' > /mnt/config/config.json && tail -f /dev/null')]" //Use this to Debug the container
+                "/mnt/config/config.json"
                 ],
                 "volumeMounts": [
                   {
