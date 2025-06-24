@@ -14,7 +14,9 @@
       "metadata": {
         "description": "Azure tenant ID to analyze"
       },
-      "defaultValue": "12345"
+      "defaultValue": "12345",
+      "minLength": 36, // GUIDs are 36 characters long (32 hex digits + 4 hyphens)
+      "maxLength": 36
     },
     "bloodhoundInstanceDomain": {
       "type": "string",
@@ -37,41 +39,6 @@
       },
       "defaultValue": "12345"
     },
-    "containerAppName": {
-      "type": "string",
-      "defaultValue": "[format('app-{0}', uniqueString(resourceGroup().id))]",
-      "metadata": {
-        "description": "Specifies the name of the container app."
-      }
-    },
-    "containerAppEnvName": {
-      "type": "string",
-      "defaultValue": "[format('env-{0}', uniqueString(resourceGroup().id))]",
-      "metadata": {
-        "description": "Specifies the name of the container app environment."
-      }
-    },
-    "containerAppLogAnalyticsName": {
-      "type": "string",
-      "defaultValue": "[format('containerapp-log-{0}', uniqueString(resourceGroup().id))]",
-      "metadata": {
-        "description": "Specifies the name of the log analytics workspace."
-      }
-    },
-    "containerRegistryName": {
-      "type": "string",
-      "defaultValue": "[format('cr{0}', uniqueString(resourceGroup().id))]",
-      "metadata": {
-        "description": "Specifies the name of the container app environment."
-      }
-    },
-    "location": {
-      "type": "string",
-      "defaultValue": "[resourceGroup().location]",
-      "metadata": {
-        "description": "Specifies the location for all resources."
-      }
-    },
     "minReplica": {
       "type": "int",
       "defaultValue": 1,
@@ -93,20 +60,20 @@
   },
   "variables": {
     "acrPullRole": "[resourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
-    "configcontent": "[concat('{\\\"batchsize\\\": 100,\\\"config\\\": \\\"/mnt/config/config.json\\\",\\\"instance\\\": \\\"https://', parameters('bloodhoundInstanceDomain'), '\\\",\\\"json\\\": false,\\\"managed-identity\\\": true,\\\"maxconnsperhost\\\": 20,\\\"maxidleconnsperhost\\\": 20,\\\"region\\\": \\\"cloud\\\",\\\"streamcount\\\": 25,\\\"tenant\\\": \\\"', parameters('azureTenantId'),'\\\",\\\"token\\\": \\\"', parameters('bloodhoundToken'),'\\\",\\\"tokenid\\\": \\\"', parameters('bloodhoundTokenId'),'\\\",\\\"verbosity\\\": 2}'
-    )]",
-    
-      "fileShareVolumeName": "config-volume", // Internal name for the volume
-      "storageMountName": "azure-files-config-storage", // Name of the storage link in the environment
-      "storageAccountName": "azstorageaccname",
-      "fileShareName": "azfilesharename"
-    },
+    "configcontent": "[concat('{\\\"batchsize\\\": 100,\\\"config\\\": \\\"/mnt/config/config.json\\\",\\\"instance\\\": \\\"https://', parameters('bloodhoundInstanceDomain'), '\\\",\\\"json\\\": false,\\\"managed-identity\\\": true,\\\"maxconnsperhost\\\": 20,\\\"maxidleconnsperhost\\\": 20,\\\"region\\\": \\\"cloud\\\",\\\"streamcount\\\": 25,\\\"tenant\\\": \\\"', parameters('azureTenantId'),'\\\",\\\"token\\\": \\\"', parameters('bloodhoundToken'),'\\\",\\\"tokenid\\\": \\\"', parameters('bloodhoundTokenId'),'\\\",\\\"verbosity\\\": 2}')]",
+    "fileShareVolumeName": "config-volume",
+    "containerAppName": "[format('app-{0}', uniqueString(resourceGroup().id))]",
+    "containerAppEnvName": "[format('env-{0}', uniqueString(resourceGroup().id))]",
+    "containerAppLogAnalyticsName": "[format('containerapp-log-{0}', uniqueString(resourceGroup().id))]",
+    "containerRegistryName": "[format('cr{0}', uniqueString(resourceGroup().id))]",
+    "location": "[resourceGroup().location]"
+  },
   "resources": [
     {
       "type": "Microsoft.OperationalInsights/workspaces",
       "apiVersion": "2021-06-01",
-      "name": "[parameters('containerAppLogAnalyticsName')]",
-      "location": "[parameters('location')]",
+      "name": "[variables('containerAppLogAnalyticsName')]",
+      "location": "[variables('location')]",
       "properties": {
         "sku": {
           "name": "PerGB2018"
@@ -116,8 +83,8 @@
     {
       "type": "Microsoft.App/managedEnvironments",
       "apiVersion": "2022-06-01-preview",
-      "name": "[parameters('containerAppEnvName')]",
-      "location": "[parameters('location')]",
+      "name": "[variables('containerAppEnvName')]",
+      "location": "[variables('location')]",
       "sku": {
         "name": "Consumption"
       },
@@ -125,89 +92,50 @@
         "appLogsConfiguration": {
           "destination": "log-analytics",
           "logAnalyticsConfiguration": {
-            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', parameters('containerAppLogAnalyticsName'))).customerId]",
-            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', parameters('containerAppLogAnalyticsName')), '2021-06-01').primarySharedKey]"
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('containerAppLogAnalyticsName'))).customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('containerAppLogAnalyticsName')), '2021-06-01').primarySharedKey]"
           }
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('containerAppLogAnalyticsName'))]"
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('containerAppLogAnalyticsName'))]"
       ]
     },
     {
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2022-01-31-preview",
-      "name": "[format('id-{0}', parameters('containerAppName'))]",
-      "location": "[parameters('location')]"
+      "name": "[format('id-{0}', variables('containerAppName'))]",
+      "location": "[variables('location')]"
     },
     {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
-      "name": "[guid(resourceGroup().id, resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName'))), variables('acrPullRole'))]",
+      "name": "[guid(resourceGroup().id, resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('containerAppName'))), variables('acrPullRole'))]",
       "properties": {
         "roleDefinitionId": "[variables('acrPullRole')]",
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName')))).principalId]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('containerAppName')))).principalId]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName')))]"
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('containerAppName')))]"
       ],
       "metadata": {
         "description": "This allows the managed identity of the container app to access the registry, note scope is applied to the wider ResourceGroup not the ACR"
       }
     },
     {
-      "type": "Microsoft.Storage/storageAccounts",
-      "apiVersion": "2023-01-01",
-      "name": "[variables('storageAccountName')]",
-      "location": "[parameters('location')]",
-      "sku": {
-        "name": "Standard_LRS"
-      },
-      "kind": "StorageV2",
-      "properties": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
-      "apiVersion": "2023-01-01",
-      "name": "[concat(variables('storageAccountName'), '/default/', variables('fileShareName'))]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
-      ],
-      "properties": {
-        "shareQuota": 8 // 8MB, adjust as needed
-      }
-    },
-    {
-      "type": "Microsoft.App/managedEnvironments/storages",
-      "apiVersion": "2024-03-01",
-      "name": "[concat(parameters('containerAppEnvName'), '/', variables('storageMountName'))]",
-      "properties": {
-        "azureFile": {
-          "accountName": "[variables('storageAccountName')]",
-          "accountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-01-01').keys[0].value]",
-          "shareName": "[variables('fileShareName')]",
-          "accessMode": "ReadWrite"
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppEnvName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('fileShareName'))]"
-      ]
-    },
-    {
       "type": "Microsoft.App/containerApps",
       "apiVersion": "2022-06-01-preview",
-      "name": "[parameters('containerAppName')]",
-      "location": "[parameters('location')]",
+      "name": "[variables('containerAppName')]",
+      "location": "[variables('location')]",
       "identity": {
         "type": "UserAssigned",
         "userAssignedIdentities": {
-          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName'))))]": {}
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('containerAppName'))))]": {}
         }
       },
       "properties": {
-        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppEnvName'))]",
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppEnvName'))]",
         "configuration": {
           "ingress": {
             "external": true,
@@ -222,13 +150,13 @@
           },
           "registries": [
             {
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName')))]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('containerAppName')))]",
               "server": "[reference(resourceId('Microsoft.Resources/deployments', 'acr')).outputs.loginServer.value]"
             }
           ]
         },
         "template": {
-          "revisionSuffix": "revision240622",
+          "revisionSuffix": "revision240624",
           "initContainers": [
             {
               "name": "config-writer",
@@ -246,14 +174,14 @@
               "volumeMounts": [
                 {
                   "mountPath": "/mnt/config", // Mount the volume here for the init container to write to
-                  "volumeName": "config-volume"
+                  "volumeName": "[variables('fileShareVolumeName')]"
                 }
               ]
             }
           ],
           "containers": [
             {
-              "name": "[parameters('containerAppName')]",
+              "name": "[variables('containerAppName')]",
               "image": "[reference(resourceId('Microsoft.Resources/deployments', 'importContainerImage')).outputs.importedImages.value[0].acrHostedImage]",
               "command": [
                 "/azurehound",
@@ -278,8 +206,7 @@
 		      "volumes": [
             {
               "name": "[variables('fileShareVolumeName')]",
-              "storageType": "AzureFile",
-              "storageName": "[variables('storageMountName')]"
+              "emptyDir": {} // An ephemeral volume that exists for the lifetime of the pod
             }
           ],
           "scale": {
@@ -301,9 +228,8 @@
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deployments', 'acr')]",
         "[resourceId('Microsoft.Resources/deployments', 'importContainerImage')]",
-        "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppEnvName'))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('containerAppName')))]",
-        "[resourceId('Microsoft.App/managedEnvironments/storages', parameters('containerAppEnvName'), variables('storageMountName'))]"
+        "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppEnvName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('containerAppName')))]"
       ]
     },
     {
@@ -317,10 +243,10 @@
         "mode": "Incremental",
         "parameters": {
           "location": {
-            "value": "[parameters('location')]"
+            "value": "[variables('location')]"
           },
           "containerRegistryName": {
-            "value": "[parameters('containerRegistryName')]"
+            "value": "[variables('containerRegistryName')]"
           }
         },
         "template": {
@@ -389,7 +315,7 @@
             "value": "[reference(resourceId('Microsoft.Resources/deployments', 'acr')).outputs.name.value]"
           },
           "location": {
-            "value": "[parameters('location')]"
+            "value": "[variables('location')]"
           },
           "images": {
             "value": "[array('azurehounddeploy.azurecr.io/azurehound:latest')]"
@@ -590,7 +516,7 @@
   "outputs": {
     "containerAppFQDN": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('containerAppName'))).configuration.ingress.fqdn]"
+      "value": "[reference(resourceId('Microsoft.App/containerApps', variables('containerAppName'))).configuration.ingress.fqdn]"
     },
     "containerImage": {
       "type": "string",
