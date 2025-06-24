@@ -14,7 +14,7 @@
       "metadata": {
         "description": "Azure tenant ID to analyze"
       },
-      "defaultValue": "12345",
+      "defaultValue": "7d174b6e-ae92-4bbe-9b67-04b9e1523d74",
       "minLength": 36, // GUIDs are 36 characters long (32 hex digits + 4 hyphens)
       "maxLength": 36
     },
@@ -66,7 +66,8 @@
     "containerAppEnvName": "[format('env-{0}', uniqueString(resourceGroup().id))]",
     "containerAppLogAnalyticsName": "[format('containerapp-log-{0}', uniqueString(resourceGroup().id))]",
     "containerRegistryName": "[format('cr{0}', uniqueString(resourceGroup().id))]",
-    "location": "[resourceGroup().location]"
+    "location": "[resourceGroup().location]",
+    "containerUMIName": "[format('umi-{0}', uniqueString(resourceGroup().id))]"
   },
   "resources": [
     {
@@ -510,6 +511,172 @@
       ],
       "metadata": {
         "description": "This module seeds the ACR with the public version of the app"
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "graph-permissions-deployment",
+      "resourceGroup": "[resourceGroup().name]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[variables('location')]"
+          },
+          "deploymentUMIName": {
+            "value": "[variables('containerUMIName')]"
+          },
+          "deploymentUMIResourceGroupName": {
+            "value": "[resourceGroup().name]"
+          },
+          "containerUMIPrincipalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', 'containerIdentity-deployment'), '2022-09-01').outputs.principalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.36.1.42791",
+              "templateHash": "2556770267153897272"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "containerUMIPrincipalId": {
+              "type": "string"
+            },
+            "deploymentUMIResourceGroupName": {
+              "type": "string"
+            },
+            "deploymentUMIName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Resources/deploymentScripts",
+              "apiVersion": "2023-08-01",
+              "name": "graph-permissions-script",
+              "location": "[parameters('location')]",
+              "kind": "AzurePowerShell",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('deploymentUMIResourceGroupName')), 'Microsoft.ManagedIdentity/userAssignedIdentities', parameters('deploymentUMIName')))]": {}
+                }
+              },
+              "properties": {
+                "azPowerShellVersion": "9.7",
+                "retentionInterval": "P1D",
+                "timeout": "PT30M",
+                "cleanupPreference": "Always",
+                "scriptContent": "      $ErrorActionPreference = \"Continue\"\n      \n      # Initialize arrays for tracking\n      $warningsList = @()\n      $successList = @()\n      $needManualSetup = $false\n      \n      try {\n          $token = (Get-AzAccessToken -ResourceUrl \"https://graph.microsoft.com/\").Token\n          $graphAppId = \"00000003-0000-0000-c000-000000000000\"\n          \n          $graphSp = Get-AzADServicePrincipal -ApplicationId $graphAppId\n          if (-not $graphSp) {\n              $needManualSetup = $true\n          }\n          \n          if ($graphSp) {\n              $headers = @{\n                  'Authorization' = \"Bearer $token\"\n                  'Content-Type' = 'application/json'\n              }\n\n              try {\n                  $apiUrl = \"https://graph.microsoft.com/v1.0/servicePrincipals/$($env:ContainerUMIPrincipalId)/appRoleAssignments\"\n                  $existingAssignments = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Get\n                  \n                  $directoryReadAllId = \"7ab1d382-f21e-4acd-a863-ba3e13f7da61\"\n                  $existingAssignment = $existingAssignments.value | Where-Object { \n                      $_.appRoleId -eq $directoryReadAllId -and \n                      $_.resourceId -eq $graphSp.Id\n                  }\n\n                  if (-not $existingAssignment) {\n                      try {\n                          $body = @{\n                              principalId = $env:ContainerUMIPrincipalId\n                              resourceId = $graphSp.Id\n                              appRoleId = $directoryReadAllId\n                          } | ConvertTo-Json\n\n                          $result = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Post -Body $body\n                          $successList += \"Directory.Read.All\"\n                      }\n                      catch {\n                          $needManualSetup = $true\n                      }\n                  }\n                  else {\n                      $successList += \"Directory.Read.All\"\n                  }\n              }\n              catch {\n                  $needManualSetup = $true\n              }\n          }\n      }\n      catch {\n          $needManualSetup = $true\n      }\n\n      # Create a structured permission status message\n      $statusMessage = if ($needManualSetup) {\n          @\"\nMANUAL PERMISSION SETUP REQUIRED\n------------------------------\nThe container's managed identity requires the following Microsoft Graph permission:\n- Directory.Read.All\n\nPlease run the provided setup script to configure these permissions:\n./setup-container-permissions.ps1 -PrincipalId $($env:ContainerUMIPrincipalId)\n\"@\n      } else {\n          \"All required permissions have been configured successfully.\"\n      }\n      \n      # Output the results\n      $DeploymentScriptOutputs = @{\n          needsManualSetup = $needManualSetup\n          statusMessage = $statusMessage\n          assignedPermissions = $successList\n      }\n    ",
+                "environmentVariables": [
+                  {
+                    "name": "ContainerUMIPrincipalId",
+                    "value": "[parameters('containerUMIPrincipalId')]"
+                  }
+                ]
+              }
+            }
+          ],
+          "outputs": {
+            "needsManualSetup": {
+              "type": "bool",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'graph-permissions-script'), '2023-08-01').outputs.needsManualSetup]"
+            },
+            "statusMessage": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'graph-permissions-script'), '2023-08-01').outputs.statusMessage]"
+            },
+            "assignedPermissions": {
+              "type": "array",
+              "value": "[reference(resourceId('Microsoft.Resources/deploymentScripts', 'graph-permissions-script'), '2023-08-01').outputs.assignedPermissions]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, resourceGroup().name), 'Microsoft.Resources/deployments', 'containerIdentity-deployment')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "containerIdentity-deployment",
+      "resourceGroup": "[resourceGroup().name]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[variables('location')]"
+          },
+          "containerUMIName": {
+            "value": "[variables('containerUMIName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.36.1.42791",
+              "templateHash": "7723817674947761621"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "containerUMIName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[parameters('containerUMIName')]",
+              "location": "[parameters('location')]"
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(subscription().id, resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('containerUMIName')), 'Reader')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('containerUMIName')), '2023-01-31').principalId]",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('containerUMIName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "resourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('containerUMIName'))]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('containerUMIName')), '2023-01-31').principalId]"
+            }
+          }
+        }
       }
     }
   ],
