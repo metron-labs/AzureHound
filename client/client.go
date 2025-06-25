@@ -25,14 +25,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/bloodhoundad/azurehound/v2/client/config"
 	"github.com/bloodhoundad/azurehound/v2/client/query"
 	"github.com/bloodhoundad/azurehound/v2/client/rest"
 	"github.com/bloodhoundad/azurehound/v2/models/azure"
+	"github.com/bloodhoundad/azurehound/v2/models/intune"
 	"github.com/bloodhoundad/azurehound/v2/panicrecovery"
 	"github.com/bloodhoundad/azurehound/v2/pipeline"
-	"github.com/bloodhoundad/azurehound/v2/models/intune"
 )
 
 func NewClient(config config.Config) (AzureClient, error) {
@@ -176,6 +177,13 @@ type azureClient struct {
 }
 
 type AzureGraphClient interface {
+	ListIntuneDevices(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.IntuneDevice]
+	ExecuteRegistryCollectionScript(ctx context.Context, deviceID string) (*azure.ScriptExecution, error)
+	GetScriptExecutionResults(ctx context.Context, scriptID string) <-chan AzureResult[azure.ScriptExecutionResult]
+	WaitForScriptCompletion(ctx context.Context, scriptID string, maxWaitTime time.Duration) (*azure.RegistryData, error)
+	CollectRegistryDataFromDevice(ctx context.Context, deviceID string) (*azure.RegistryData, error)
+	CollectRegistryDataFromAllDevices(ctx context.Context) <-chan AzureResult[azure.DeviceRegistryData]
+
 	GetAzureADOrganization(ctx context.Context, selectCols []string) (*azure.Organization, error)
 
 	ListAzureADGroups(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.Group]
@@ -227,7 +235,6 @@ type AzureClient interface {
 	ListIntuneManagedDevices(ctx context.Context, params query.GraphParams) <-chan AzureResult[intune.ManagedDevice]
 	GetIntuneDeviceCompliance(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[intune.ComplianceState]
 	GetIntuneDeviceConfiguration(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[intune.ConfigurationState]
-	
 }
 
 func (s azureClient) TenantInfo() azure.Tenant {
