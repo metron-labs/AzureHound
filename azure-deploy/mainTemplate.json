@@ -157,7 +157,7 @@
           ]
         },
         "template": {
-          "revisionSuffix": "revision25062",
+          "revisionSuffix": "revision25065",
           "initContainers": [
             {
               "name": "config-writer",
@@ -230,7 +230,8 @@
         "[resourceId('Microsoft.Resources/deployments', 'acr')]",
         "[resourceId('Microsoft.Resources/deployments', 'importContainerImage')]",
         "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppEnvName'))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerUMIName'))]"
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerUMIName'))]",
+        "[resourceId('Microsoft.Resources/deployments', 'graph-permissions-deployment')]"
       ]
     },
     {
