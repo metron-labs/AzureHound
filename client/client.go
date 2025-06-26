@@ -177,14 +177,17 @@ type azureClient struct {
 }
 
 type AzureGraphClient interface {
+	ValidateScriptDeployment(ctx context.Context) error
+	GetAzureADOrganization(ctx context.Context, selectCols []string) (*azure.Organization, error)
+
 	ListIntuneDevices(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.IntuneDevice]
 	ExecuteRegistryCollectionScript(ctx context.Context, deviceID string) (*azure.ScriptExecution, error)
 	GetScriptExecutionResults(ctx context.Context, scriptID string) <-chan AzureResult[azure.ScriptExecutionResult]
 	WaitForScriptCompletion(ctx context.Context, scriptID string, maxWaitTime time.Duration) (*azure.RegistryData, error)
 	CollectRegistryDataFromDevice(ctx context.Context, deviceID string) (*azure.RegistryData, error)
 	CollectRegistryDataFromAllDevices(ctx context.Context) <-chan AzureResult[azure.DeviceRegistryData]
-
-	GetAzureADOrganization(ctx context.Context, selectCols []string) (*azure.Organization, error)
+	GetDeployedScriptID(ctx context.Context, scriptName string) (string, error)
+	TriggerScriptExecution(ctx context.Context, scriptID, deviceID string) error
 
 	ListAzureADGroups(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.Group]
 	ListAzureADGroupMembers(ctx context.Context, objectId string, params query.GraphParams) <-chan AzureResult[json.RawMessage]
