@@ -18,6 +18,20 @@
       "minLength": 36, // GUIDs are 36 characters long (32 hex digits + 4 hyphens)
       "maxLength": 36
     },
+    "azureSecret": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure Secret"
+      },
+      "defaultValue": "<Azure Secret>"
+    },
+    "azureAppID": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure App ID"
+      },
+      "defaultValue": "<Azure app ID>"
+    },
     "bloodhoundInstanceDomain": {
       "type": "string",
       "metadata": {
@@ -60,7 +74,7 @@
   },
   "variables": {
     "acrPullRole": "[resourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
-    "configcontent": "[concat('{\\\"batchsize\\\": 100,\\\"config\\\": \\\"/mnt/config/config.json\\\",\\\"instance\\\": \\\"https://', parameters('bloodhoundInstanceDomain'), '\\\",\\\"json\\\": false,\\\"managed-identity\\\": true,\\\"maxconnsperhost\\\": 20,\\\"maxidleconnsperhost\\\": 20,\\\"region\\\": \\\"cloud\\\",\\\"streamcount\\\": 25,\\\"tenant\\\": \\\"', parameters('azureTenantId'),'\\\",\\\"token\\\": \\\"', parameters('bloodhoundToken'),'\\\",\\\"tokenid\\\": \\\"', parameters('bloodhoundTokenId'),'\\\",\\\"verbosity\\\": 2}')]",
+    "configcontent": "[concat('{\\\"batchsize\\\": 100,\\\"config\\\": \\\"/mnt/config/config.json\\\",\\\"instance\\\": \\\"https://', parameters('bloodhoundInstanceDomain'), '\\\",\\\"json\\\": false,\\\"managed-identity\\\": false,\\\"maxconnsperhost\\\": 20,\\\"maxidleconnsperhost\\\": 20,\\\"region\\\": \\\"cloud\\\",\\\"streamcount\\\": 25,\\\"tenant\\\": \\\"', parameters('azureTenantId'),'\\\",\\\"token\\\": \\\"', parameters('bloodhoundToken'),'\\\",\\\"tokenid\\\": \\\"', parameters('bloodhoundTokenId'),'\\\",\\\"secret\\\": \\\"', parameters('azureSecret'),'\\\",\\\"app\\\": \\\"', parameters('azureAppID'),'\\\",\\\"verbosity\\\": 2}')]",
     "fileShareVolumeName": "config-volume",
     "containerAppName": "[format('app-{0}', uniqueString(resourceGroup().id))]",
     "containerAppEnvName": "[format('env-{0}', uniqueString(resourceGroup().id))]",
