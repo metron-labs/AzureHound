@@ -170,4 +170,4 @@ func performBasicDeviceSecurityAnalysis(deviceData azure.DeviceRegistryData) azu
 	}
 
 	return analysis
-} //
+}
