@@ -2,15 +2,11 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "resourceGroupName": { "value": "rg-azurehound-dev2" },
-    "location": { "value": "eastus" },
-    "containerUMIName": { "value": "azurehound-container-umi2" },
-    "containerUMIResourceGroupName": { "value": "rg-azurehound-dev2" },
-    "deploymentUMIName": { "value": "azurehound-deploy-umi2" },
-    "deploymentUMIResourceGroupName": { "value": "rg-azurehound-dev2" },
     "azureTenantId": { "value": "6c12b0b0-b2cc-4a73-8252-0b94bfca2145" },
-    "bloodhoundInstanceDomain": { "value": "https://maplesyrup.bloodhoundenterprise.io/" },
-    "bloodhoundTokenId": { "value": "501ca8f5-2dd2-40b6-a16d-378d8ce60db7" },
+    "azureAppID": {"value": ""},
+    "azureSecret": {"value": ""},
+    "bloodhoundInstanceDomain": { "value": "maplesyrup.bloodhoundenterprise.io/" },
+    "bloodhoundTokenId": { "value": "" },
     "bloodhoundToken": { "value": "" }
   }
 }

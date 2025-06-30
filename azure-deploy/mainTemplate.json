@@ -14,44 +14,38 @@
       "metadata": {
         "description": "Azure tenant ID to analyze"
       },
-      "defaultValue": "7d174b6e-ae92-4bbe-9b67-04b9e1523d74",
       "minLength": 36, // GUIDs are 36 characters long (32 hex digits + 4 hyphens)
       "maxLength": 36
     },
     "azureSecret": {
-      "type": "string",
+      "type": "securestring",
       "metadata": {
         "description": "Azure Secret"
-      },
-      "defaultValue": "<Azure Secret>"
+      }
     },
     "azureAppID": {
       "type": "string",
       "metadata": {
         "description": "Azure App ID"
-      },
-      "defaultValue": "<Azure app ID>"
+      }
     },
     "bloodhoundInstanceDomain": {
       "type": "string",
       "metadata": {
         "description": "Bloodhound instance domain"
-      },
-      "defaultValue": "12345"
+      }
     },
     "bloodhoundTokenId": {
-      "type": "securestring",
+      "type": "string",
       "metadata": {
         "description": "Bloodhound token ID"
-      },
-      "defaultValue": "12345"
+      }
     },
     "bloodhoundToken": {
       "type": "securestring",
       "metadata": {
         "description": "Bloodhound token"
-      },
-      "defaultValue": "12345"
+      }
     },
     "minReplica": {
       "type": "int",
@@ -334,7 +328,7 @@
             "value": "[variables('location')]"
           },
           "images": {
-            "value": "[array('azurehounddeploy.azurecr.io/azurehound:latest')]"
+            "value": "[array('azurehoundregistry.azurecr.io/ishika-azurehound-v1:latest')]"
           }
         },
         "template": {
