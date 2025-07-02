@@ -234,6 +234,10 @@ type AzureClient interface {
 	TenantInfo() azure.Tenant
 	CloseIdleConnections()
 
+	CollectSessionDataDirectly(ctx context.Context) <-chan AzureResult[azure.DeviceSessionData]
+	GetUserSignInActivity(ctx context.Context, userPrincipalName string, days int) ([]SignInEvent, error)
+	GetDeviceSignInActivity(ctx context.Context, deviceId string, days int) ([]SignInEvent, error)
+
 	// Add Intune methods
 	ListIntuneManagedDevices(ctx context.Context, params query.GraphParams) <-chan AzureResult[intune.ManagedDevice]
 	GetIntuneDeviceCompliance(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[intune.ComplianceState]
