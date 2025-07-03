@@ -36,6 +36,30 @@ import (
 	"github.com/bloodhoundad/azurehound/v2/pipeline"
 )
 
+// SignInEvent represents a sign-in event from Microsoft Graph
+type SignInEvent struct {
+	ID                string    `json:"id"`
+	CreatedDateTime   time.Time `json:"createdDateTime"`
+	UserDisplayName   string    `json:"userDisplayName"`
+	UserPrincipalName string    `json:"userPrincipalName"`
+	UserId            string    `json:"userId"`
+	AppDisplayName    string    `json:"appDisplayName"`
+	ClientAppUsed     string    `json:"clientAppUsed"`
+	IPAddress         string    `json:"ipAddress"`
+	IsInteractive     bool      `json:"isInteractive"`
+	Status            struct {
+		ErrorCode int `json:"errorCode"`
+	} `json:"status"`
+	DeviceDetail struct {
+		DeviceId        string `json:"deviceId"`
+		DisplayName     string `json:"displayName"`
+		OperatingSystem string `json:"operatingSystem"`
+		IsCompliant     bool   `json:"isCompliant"`
+	} `json:"deviceDetail"`
+	RiskState           string `json:"riskState"`
+	RiskLevelAggregated string `json:"riskLevelAggregated"`
+}
+
 func NewClient(config config.Config) (AzureClient, error) {
 	if msgraph, err := rest.NewRestClient(config.GraphUrl(), config); err != nil {
 		return nil, err

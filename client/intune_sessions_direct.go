@@ -1,78 +1,22 @@
+// client/intune_sessions_direct.go - Correct implementation using AzureHound patterns
 package client
 
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/bloodhoundad/azurehound/v2/client/query"
+	"github.com/bloodhoundad/azurehound/v2/constants"
 	"github.com/bloodhoundad/azurehound/v2/models/azure"
 )
 
-// Microsoft Graph API endpoints for session data
-const (
-	SignInLogsEndpoint     = "/auditLogs/signIns"
-	DirectoryAuditEndpoint = "/auditLogs/directoryAudits"
-	RiskDetectionsEndpoint = "/identityProtection/riskDetections"
-	DevicesEndpoint        = "/devices"
-	UsersEndpoint          = "/users"
-)
-
-// SignInEvent represents a sign-in event from Microsoft Graph
-type SignInEvent struct {
-	ID                      string         `json:"id"`
-	CreatedDateTime         time.Time      `json:"createdDateTime"`
-	UserDisplayName         string         `json:"userDisplayName"`
-	UserPrincipalName       string         `json:"userPrincipalName"`
-	UserId                  string         `json:"userId"`
-	AppDisplayName          string         `json:"appDisplayName"`
-	ClientAppUsed           string         `json:"clientAppUsed"`
-	IPAddress               string         `json:"ipAddress"`
-	IsInteractive           bool           `json:"isInteractive"`
-	ResourceDisplayName     string         `json:"resourceDisplayName"`
-	RiskState               string         `json:"riskState"`
-	RiskLevelAggregated     string         `json:"riskLevelAggregated"`
-	RiskLevelDuringSignIn   string         `json:"riskLevelDuringSignIn"`
-	Status                  SignInStatus   `json:"status"`
-	DeviceDetail            DeviceDetail   `json:"deviceDetail"`
-	Location                SignInLocation `json:"location"`
-	ConditionalAccessStatus string         `json:"conditionalAccessStatus"`
-}
-
-type SignInStatus struct {
-	ErrorCode         int    `json:"errorCode"`
-	FailureReason     string `json:"failureReason"`
-	AdditionalDetails string `json:"additionalDetails"`
-}
-
-type DeviceDetail struct {
-	DeviceId        string `json:"deviceId"`
-	DisplayName     string `json:"displayName"`
-	OperatingSystem string `json:"operatingSystem"`
-	Browser         string `json:"browser"`
-	IsCompliant     bool   `json:"isCompliant"`
-	IsManaged       bool   `json:"isManaged"`
-	TrustType       string `json:"trustType"`
-}
-
-type SignInLocation struct {
-	City            string         `json:"city"`
-	State           string         `json:"state"`
-	CountryOrRegion string         `json:"countryOrRegion"`
-	GeoCoordinates  GeoCoordinates `json:"geoCoordinates"`
-}
-
-type GeoCoordinates struct {
-	Altitude  float64 `json:"altitude"`
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-}
-
-type SignInLogsResponse struct {
-	Value    []SignInEvent `json:"value"`
-	NextLink string        `json:"@odata.nextLink"`
+// Helper function to set default parameters (copied from intune_devices.go)
+func setDefaultSessionParams(params *query.GraphParams) {
+	if params.Top == 0 {
+		params.Top = 100 // Smaller default for sign-in logs
+	}
 }
 
 // CollectSessionDataDirectly collects session data from Microsoft Graph Sign-In Logs
@@ -82,17 +26,58 @@ func (s *azureClient) CollectSessionDataDirectly(ctx context.Context) <-chan Azu
 	go func() {
 		defer close(out)
 
-		// Get sign-in logs from Microsoft Graph
-		signInLogs, err := s.getSignInLogs(ctx, 7, 1000)
-		if err != nil {
+		fmt.Printf("🔍 Starting session data collection from Graph API...\n")
+
+		// Get sign-in logs using the correct AzureHound pattern
+		params := query.GraphParams{
+			Filter: fmt.Sprintf("createdDateTime ge %s", time.Now().AddDate(0, 0, -7).Format(time.RFC3339)),
+			Select: []string{
+				"id", "createdDateTime", "userDisplayName", "userPrincipalName",
+				"userId", "appDisplayName", "clientAppUsed", "ipAddress",
+				"isInteractive", "status", "deviceDetail", "riskState", "riskLevelAggregated",
+			},
+		}
+		setDefaultSessionParams(&params)
+
+		signInLogsChan := s.listSignInLogs(ctx, params)
+
+		var signInLogs []SignInEvent
+		errorCount := 0
+
+		// Collect all sign-in logs
+		for result := range signInLogsChan {
+			if result.Error != nil {
+				fmt.Printf("❌ Error collecting sign-in log: %v\n", result.Error)
+				errorCount++
+				if errorCount > 5 { // Stop after too many errors
+					out <- AzureResult[azure.DeviceSessionData]{
+						Error: fmt.Errorf("too many errors collecting sign-in logs: %w", result.Error),
+					}
+					return
+				}
+				continue
+			}
+			signInLogs = append(signInLogs, result.Ok)
+		}
+
+		fmt.Printf("📊 Retrieved %d sign-in events (%d errors)\n", len(signInLogs), errorCount)
+
+		if len(signInLogs) == 0 {
+			fmt.Printf("⚠️  No sign-in logs found. This could mean:\n")
+			fmt.Printf("   • No users signed in recently (last 7 days)\n")
+			fmt.Printf("   • Missing AuditLog.Read.All permission\n")
+			fmt.Printf("   • Azure AD Premium license required for audit logs\n")
+			fmt.Printf("   • Sign-in logs not available in this tenant\n")
+
 			out <- AzureResult[azure.DeviceSessionData]{
-				Error: fmt.Errorf("failed to get sign-in logs: %w", err),
+				Error: fmt.Errorf("no sign-in logs found - check permissions and recent user activity"),
 			}
 			return
 		}
 
-		// Process sign-in logs and group by device
-		deviceSessions := s.processSignInLogs(signInLogs)
+		// Process the logs into device sessions
+		deviceSessions := s.processSignInLogsSimple(signInLogs)
+		fmt.Printf("🔄 Created %d device session records\n", len(deviceSessions))
 
 		// Send results
 		for _, sessionData := range deviceSessions {
@@ -103,73 +88,72 @@ func (s *azureClient) CollectSessionDataDirectly(ctx context.Context) <-chan Azu
 	return out
 }
 
-// getSignInLogs retrieves sign-in logs from Microsoft Graph
-func (s *azureClient) getSignInLogs(ctx context.Context, days, maxResults int) ([]SignInEvent, error) {
-	// Build the Graph API query
-	startTime := time.Now().AddDate(0, 0, -days)
-	filter := fmt.Sprintf("createdDateTime ge %s", startTime.Format(time.RFC3339))
-
-	params := url.Values{}
-	params.Add("$filter", filter)
-	params.Add("$select", strings.Join([]string{
-		"id", "createdDateTime", "userDisplayName", "userPrincipalName", "userId",
-		"appDisplayName", "clientAppUsed", "ipAddress", "isInteractive",
-		"resourceDisplayName", "riskState", "riskLevelAggregated", "riskLevelDuringSignIn",
-		"status", "deviceDetail", "location", "conditionalAccessStatus",
-	}, ","))
-	params.Add("$top", strconv.Itoa(min(maxResults, 999)))
-	params.Add("$orderby", "createdDateTime desc")
-
-	return s.getAllSignInEvents(ctx, SignInLogsEndpoint, params)
-}
-
-// getAllSignInEvents handles pagination to get all sign-in events
-func (s *azureClient) getAllSignInEvents(ctx context.Context, endpoint string, params url.Values) ([]SignInEvent, error) {
-	var allEvents []SignInEvent
-
-	// This is a simplified implementation - in reality you'd use the existing
-	// AzureHound HTTP client infrastructure here
-	// For now, return empty slice to avoid compilation errors
-
-	// TODO: Implement actual Graph API call using AzureHound's existing HTTP client
-	// path := fmt.Sprintf("/%s%s?%s", constants.GraphApiVersion, endpoint, params.Encode())
-	// Use s.msgraphClient or similar to make the actual API call
-
-	return allEvents, nil
-}
-
 // GetUserSignInActivity retrieves sign-in activity for a specific user
 func (s *azureClient) GetUserSignInActivity(ctx context.Context, userPrincipalName string, days int) ([]SignInEvent, error) {
-	startTime := time.Now().AddDate(0, 0, -days)
-	filter := fmt.Sprintf("userPrincipalName eq '%s' and createdDateTime ge %s",
-		userPrincipalName, startTime.Format(time.RFC3339))
+	fmt.Printf("🔍 Getting sign-in activity for user: %s\n", userPrincipalName)
 
-	params := url.Values{}
-	params.Add("$filter", filter)
-	params.Add("$orderby", "createdDateTime desc")
-	params.Add("$top", "100")
+	params := query.GraphParams{
+		Filter: fmt.Sprintf("userPrincipalName eq '%s' and createdDateTime ge %s",
+			userPrincipalName, time.Now().AddDate(0, 0, -days).Format(time.RFC3339)),
+		Top: 50,
+	}
 
-	return s.getAllSignInEvents(ctx, SignInLogsEndpoint, params)
+	signInLogsChan := s.listSignInLogs(ctx, params)
+
+	var signInLogs []SignInEvent
+	for result := range signInLogsChan {
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		signInLogs = append(signInLogs, result.Ok)
+	}
+
+	return signInLogs, nil
 }
 
 // GetDeviceSignInActivity retrieves sign-in activity for a specific device
 func (s *azureClient) GetDeviceSignInActivity(ctx context.Context, deviceId string, days int) ([]SignInEvent, error) {
-	startTime := time.Now().AddDate(0, 0, -days)
-	filter := fmt.Sprintf("deviceDetail/deviceId eq '%s' and createdDateTime ge %s",
-		deviceId, startTime.Format(time.RFC3339))
+	fmt.Printf("🔍 Getting sign-in activity for device: %s\n", deviceId)
 
-	params := url.Values{}
-	params.Add("$filter", filter)
-	params.Add("$orderby", "createdDateTime desc")
-	params.Add("$top", "100")
+	params := query.GraphParams{
+		Filter: fmt.Sprintf("deviceDetail/deviceId eq '%s' and createdDateTime ge %s",
+			deviceId, time.Now().AddDate(0, 0, -days).Format(time.RFC3339)),
+		Top: 50,
+	}
 
-	return s.getAllSignInEvents(ctx, SignInLogsEndpoint, params)
+	signInLogsChan := s.listSignInLogs(ctx, params)
+
+	var signInLogs []SignInEvent
+	for result := range signInLogsChan {
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		signInLogs = append(signInLogs, result.Ok)
+	}
+
+	return signInLogs, nil
 }
 
-// processSignInLogs converts sign-in logs to DeviceSessionData
-func (s *azureClient) processSignInLogs(signInLogs []SignInEvent) []azure.DeviceSessionData {
+// listSignInLogs follows the exact AzureHound pattern from intune_devices.go
+func (s *azureClient) listSignInLogs(ctx context.Context, params query.GraphParams) <-chan AzureResult[SignInEvent] {
+	var (
+		out  = make(chan AzureResult[SignInEvent])
+		path = fmt.Sprintf("/%s/auditLogs/signIns", constants.GraphApiVersion)
+	)
+
+	setDefaultSessionParams(&params)
+
+	// Use the exact same pattern as AzureHound - call getAzureObjectList
+	go getAzureObjectList[SignInEvent](s.msgraph, ctx, path, params, out)
+	return out
+}
+
+// processSignInLogsSimple converts sign-in logs to device session data
+func (s *azureClient) processSignInLogsSimple(signInLogs []SignInEvent) []azure.DeviceSessionData {
+	fmt.Printf("🔄 Processing %d sign-in logs into device sessions\n", len(signInLogs))
+
 	// Group sign-ins by device
-	deviceSessions := make(map[string][]SignInEvent)
+	deviceGroups := make(map[string][]SignInEvent)
 
 	for _, signIn := range signInLogs {
 		deviceKey := signIn.DeviceDetail.DeviceId
@@ -177,108 +161,105 @@ func (s *azureClient) processSignInLogs(signInLogs []SignInEvent) []azure.Device
 			deviceKey = signIn.DeviceDetail.DisplayName
 		}
 		if deviceKey == "" {
-			deviceKey = signIn.IPAddress // Fallback to IP
+			deviceKey = fmt.Sprintf("Unknown_%s", signIn.IPAddress)
 		}
 
-		deviceSessions[deviceKey] = append(deviceSessions[deviceKey], signIn)
+		deviceGroups[deviceKey] = append(deviceGroups[deviceKey], signIn)
 	}
+
+	fmt.Printf("📊 Grouped sign-ins into %d devices\n", len(deviceGroups))
 
 	var results []azure.DeviceSessionData
 
-	for deviceKey, sessions := range deviceSessions {
-		sessionData := s.convertSignInsToSessionData(deviceKey, sessions)
+	for deviceKey, sessions := range deviceGroups {
+		fmt.Printf("🔄 Processing device: %s (%d sessions)\n", deviceKey, len(sessions))
+		sessionData := s.createDeviceSessionData(deviceKey, sessions)
 		results = append(results, sessionData)
 	}
 
 	return results
 }
 
-// convertSignInsToSessionData converts Graph API data to our format
-func (s *azureClient) convertSignInsToSessionData(deviceKey string, signIns []SignInEvent) azure.DeviceSessionData {
+// createDeviceSessionData creates session data for a device
+func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignInEvent) azure.DeviceSessionData {
 	now := time.Now()
 
-	// Create device info from sign-in data
+	// Create basic device info
 	var deviceInfo azure.IntuneDevice
 	if len(signIns) > 0 {
-		firstSignIn := signIns[0]
+		first := signIns[0]
 		deviceInfo = azure.IntuneDevice{
-			ID:                firstSignIn.DeviceDetail.DeviceId,
-			DeviceName:        firstSignIn.DeviceDetail.DisplayName,
-			OperatingSystem:   firstSignIn.DeviceDetail.OperatingSystem,
-			UserPrincipalName: firstSignIn.UserPrincipalName,
-			UserDisplayName:   firstSignIn.UserDisplayName,
-			LastSyncDateTime:  firstSignIn.CreatedDateTime,
-			ComplianceState:   getComplianceState(firstSignIn.DeviceDetail.IsCompliant),
-			AzureADDeviceID:   firstSignIn.DeviceDetail.DeviceId,
+			ID:                first.DeviceDetail.DeviceId,
+			DeviceName:        first.DeviceDetail.DisplayName,
+			OperatingSystem:   first.DeviceDetail.OperatingSystem,
+			UserPrincipalName: first.UserPrincipalName,
+			UserDisplayName:   first.UserDisplayName,
+			LastSyncDateTime:  first.CreatedDateTime,
+			ComplianceState:   getComplianceString(first.DeviceDetail.IsCompliant),
+			AzureADDeviceID:   first.DeviceDetail.DeviceId,
+		}
+
+		if deviceInfo.DeviceName == "" {
+			deviceInfo.DeviceName = deviceKey
 		}
 	}
 
-	// Convert sign-ins to session data
+	// Process sessions
 	var activeSessions []azure.ActiveSession
 	var loggedOnUsers []azure.LoggedOnUser
 	userMap := make(map[string]bool)
 
+	adminCount := 0
+	suspiciousActivities := []azure.SuspiciousActivity{}
+
 	for i, signIn := range signIns {
 		// Only process successful sign-ins
 		if signIn.Status.ErrorCode == 0 {
+			isAdmin := isAdminUser(signIn.UserPrincipalName)
+			if isAdmin {
+				adminCount++
+			}
+
 			session := azure.ActiveSession{
 				SessionID:     i + 1,
-				UserName:      extractUsernameFromUPN(signIn.UserPrincipalName),
-				DomainName:    extractDomainFromUPN(signIn.UserPrincipalName),
-				SessionType:   determineSessionType(signIn),
+				UserName:      getUsernameFromUPN(signIn.UserPrincipalName),
+				DomainName:    getDomainFromUPN(signIn.UserPrincipalName),
+				SessionType:   getSessionType(signIn.ClientAppUsed),
 				SessionState:  "Active",
 				LogonTime:     signIn.CreatedDateTime,
-				IdleTime:      calculateIdleTime(signIn.CreatedDateTime),
+				IdleTime:      getIdleTime(signIn.CreatedDateTime),
 				ClientName:    signIn.DeviceDetail.DisplayName,
 				ClientAddress: signIn.IPAddress,
-				ProcessCount:  0,
-				IsElevated:    isElevatedSession(signIn),
+				IsElevated:    isAdmin,
 			}
 			activeSessions = append(activeSessions, session)
 
 			// Add unique users
-			userKey := signIn.UserPrincipalName
-			if !userMap[userKey] {
-				userMap[userKey] = true
+			if !userMap[signIn.UserPrincipalName] {
+				userMap[signIn.UserPrincipalName] = true
 				user := azure.LoggedOnUser{
-					UserName:         extractUsernameFromUPN(signIn.UserPrincipalName),
-					DomainName:       extractDomainFromUPN(signIn.UserPrincipalName),
+					UserName:         getUsernameFromUPN(signIn.UserPrincipalName),
+					DomainName:       getDomainFromUPN(signIn.UserPrincipalName),
 					SID:              signIn.UserId,
 					LogonType:        "Interactive",
 					AuthPackage:      "AzureAD",
 					LogonTime:        signIn.CreatedDateTime,
 					LogonServer:      "login.microsoftonline.com",
 					HasCachedCreds:   true,
-					IsServiceAccount: false,
-					TokenPrivileges:  []string{},
+					IsServiceAccount: isServiceUser(signIn.UserPrincipalName),
+					TokenPrivileges:  getTokenPrivileges(isAdmin),
 				}
 				loggedOnUsers = append(loggedOnUsers, user)
 			}
 		}
-	}
 
-	// Calculate security indicators
-	adminSessions := 0
-	remoteSessions := 0
-	suspiciousActivities := []azure.SuspiciousActivity{}
-
-	for _, session := range activeSessions {
-		if session.IsElevated {
-			adminSessions++
-		}
-		if session.SessionType == "RDP" {
-			remoteSessions++
-		}
-	}
-
-	// Check for high-risk sign-ins
-	for _, signIn := range signIns {
+		// Check for suspicious activities
 		if signIn.RiskState == "atRisk" || signIn.RiskLevelAggregated == "high" {
 			activity := azure.SuspiciousActivity{
 				ActivityType: "High_Risk_Sign_In",
-				Description:  fmt.Sprintf("High risk sign-in detected for user %s", signIn.UserDisplayName),
+				Description:  fmt.Sprintf("High risk sign-in for %s from %s", signIn.UserDisplayName, signIn.IPAddress),
 				RiskLevel:    "High",
-				Evidence:     []string{fmt.Sprintf("Risk state: %s", signIn.RiskState)},
+				Evidence:     []string{fmt.Sprintf("Risk: %s", signIn.RiskState)},
 				DetectedAt:   signIn.CreatedDateTime,
 				UserName:     signIn.UserPrincipalName,
 				SessionID:    0,
@@ -287,33 +268,37 @@ func (s *azureClient) convertSignInsToSessionData(deviceKey string, signIns []Si
 		}
 	}
 
+	// Create session data
 	sessionData := azure.SessionData{
 		DeviceInfo: azure.DeviceInfo{
 			ComputerName:  deviceInfo.DeviceName,
 			Domain:        "AZUREAD",
 			User:          "SYSTEM",
 			Timestamp:     now.Format(time.RFC3339),
-			ScriptVersion: "azurehound-graph-api-1.0",
+			ScriptVersion: "azurehound-graph-1.0",
 		},
 		ActiveSessions: activeSessions,
 		LoggedOnUsers:  loggedOnUsers,
 		SecurityIndicators: azure.SessionSecurityInfo{
-			AdminSessionsActive:     adminSessions > 0,
-			RemoteSessionsActive:    remoteSessions > 0,
+			AdminSessionsActive:     adminCount > 0,
+			RemoteSessionsActive:    false,
 			ServiceAccountSessions:  false,
-			CredentialTheftRisk:     calculateCredentialRisk(adminSessions),
-			PrivilegeEscalationRisk: calculatePrivilegeRisk(len(activeSessions)),
+			CredentialTheftRisk:     getRiskLevel(adminCount),
+			PrivilegeEscalationRisk: getRiskLevel(adminCount),
 			SuspiciousActivities:    suspiciousActivities,
 		},
 		Summary: azure.SessionDataSummary{
 			TotalActiveSessions: len(activeSessions),
 			UniqueUsers:         len(loggedOnUsers),
-			AdminSessions:       adminSessions,
-			RemoteSessions:      remoteSessions,
+			AdminSessions:       adminCount,
+			RemoteSessions:      0,
 			ServiceSessions:     0,
 			CredentialExposure:  len(loggedOnUsers),
 		},
 	}
+
+	fmt.Printf("✅ Created session data for %s: %d sessions, %d users, %d admin sessions\n",
+		deviceInfo.DeviceName, len(activeSessions), len(loggedOnUsers), adminCount)
 
 	return azure.DeviceSessionData{
 		Device:      deviceInfo,
@@ -323,25 +308,22 @@ func (s *azureClient) convertSignInsToSessionData(deviceKey string, signIns []Si
 }
 
 // Helper functions
-func getComplianceState(isCompliant bool) string {
+func getComplianceString(isCompliant bool) string {
 	if isCompliant {
 		return "compliant"
 	}
 	return "noncompliant"
 }
 
-func extractUsernameFromUPN(upn string) string {
+func getUsernameFromUPN(upn string) string {
 	if upn == "" {
 		return "Unknown"
 	}
 	parts := strings.Split(upn, "@")
-	if len(parts) > 0 {
-		return parts[0]
-	}
-	return upn
+	return parts[0]
 }
 
-func extractDomainFromUPN(upn string) string {
+func getDomainFromUPN(upn string) string {
 	if upn == "" {
 		return "AZUREAD"
 	}
@@ -352,53 +334,50 @@ func extractDomainFromUPN(upn string) string {
 	return "AZUREAD"
 }
 
-func determineSessionType(signIn SignInEvent) string {
-	if signIn.ClientAppUsed == "Mobile Apps and Desktop clients" {
-		return "Interactive"
+func getSessionType(clientApp string) string {
+	lower := strings.ToLower(clientApp)
+	if strings.Contains(lower, "mobile") {
+		return "Mobile"
 	}
-	if signIn.ClientAppUsed == "Browser" {
-		return "Interactive"
+	if strings.Contains(lower, "browser") {
+		return "Browser"
 	}
-	if strings.Contains(strings.ToLower(signIn.ClientAppUsed), "remote") {
-		return "RDP"
+	if strings.Contains(lower, "desktop") {
+		return "Desktop"
 	}
 	return "Interactive"
 }
 
-func isElevatedSession(signIn SignInEvent) bool {
-	// Simple heuristic - check if user has admin in name
-	return strings.Contains(strings.ToLower(signIn.UserPrincipalName), "admin") ||
-		strings.Contains(strings.ToLower(signIn.UserDisplayName), "admin")
-}
-
-func calculateIdleTime(logonTime time.Time) string {
+func getIdleTime(logonTime time.Time) string {
 	duration := time.Since(logonTime)
 	hours := int(duration.Hours())
 	minutes := int(duration.Minutes()) % 60
 	return fmt.Sprintf("%02d:%02d:00", hours, minutes)
 }
 
-func calculateCredentialRisk(adminSessions int) string {
-	if adminSessions > 2 {
+func isAdminUser(upn string) bool {
+	lower := strings.ToLower(upn)
+	return strings.Contains(lower, "admin") || strings.Contains(lower, "root")
+}
+
+func isServiceUser(upn string) bool {
+	lower := strings.ToLower(upn)
+	return strings.Contains(lower, "service") || strings.Contains(lower, "svc") || strings.HasSuffix(lower, "$")
+}
+
+func getTokenPrivileges(isAdmin bool) []string {
+	if isAdmin {
+		return []string{"SeDebugPrivilege", "SeImpersonatePrivilege"}
+	}
+	return []string{}
+}
+
+func getRiskLevel(adminCount int) string {
+	if adminCount > 2 {
 		return "High"
-	} else if adminSessions > 0 {
+	}
+	if adminCount > 0 {
 		return "Medium"
 	}
 	return "Low"
-}
-
-func calculatePrivilegeRisk(totalSessions int) string {
-	if totalSessions > 5 {
-		return "High"
-	} else if totalSessions > 2 {
-		return "Medium"
-	}
-	return "Low"
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
