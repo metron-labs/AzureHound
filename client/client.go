@@ -201,6 +201,24 @@ type azureClient struct {
 }
 
 type AzureGraphClient interface {
+
+	// Add these method signatures to the AzureGraphClient interface in client/client.go
+
+	// User Role Assignment Methods
+	ListUserAppRoleAssignments(ctx context.Context, userID string, params query.GraphParams) <-chan AzureResult[azure.AppRoleAssignment]
+
+	// Sign-in Activity Methods
+	ListSignIns(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.SignIn]
+
+	// Device Registration Methods
+	GetDeviceRegisteredUsers(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[json.RawMessage]
+	GetDeviceRegisteredOwners(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[json.RawMessage]
+
+	// High-level Collection Methods
+	CollectGroupMembershipData(ctx context.Context) <-chan AzureResult[azure.GroupMembershipData]
+	CollectUserRoleAssignments(ctx context.Context) <-chan AzureResult[azure.UserRoleData]
+	CollectDeviceAccessData(ctx context.Context) <-chan AzureResult[azure.DeviceAccessData]
+
 	ValidateScriptDeployment(ctx context.Context) error
 	GetAzureADOrganization(ctx context.Context, selectCols []string) (*azure.Organization, error)
 
