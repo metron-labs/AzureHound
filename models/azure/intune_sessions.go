@@ -5,6 +5,20 @@ import (
 	"time"
 )
 
+// Add to models/azure/ - new types for role detection
+type DirectoryRole struct {
+	ID             string `json:"id"`
+	DisplayName    string `json:"displayName"`
+	Description    string `json:"description"`
+	RoleTemplateId string `json:"roleTemplateId"`
+}
+
+type DirectoryObject struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	ObjectType  string `json:"@odata.type"`
+}
+
 // DeviceSessionData combines device information with collected session data
 type DeviceSessionData struct {
 	Device      IntuneDevice `json:"device"`

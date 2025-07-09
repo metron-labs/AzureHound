@@ -258,6 +258,14 @@ type AzureClient interface {
 	TenantInfo() azure.Tenant
 	CloseIdleConnections()
 
+	// New methods for role detection
+	// In client/client.go
+	GetUserDirectoryRoles(ctx context.Context, userPrincipalName string) ([]azure.DirectoryRole, error)
+	GetUserMemberOf(ctx context.Context, userPrincipalName string) ([]azure.DirectoryObject, error)
+
+	// GetUserDirectoryRoles(ctx context.Context, userPrincipalName string) ([]DirectoryRole, error)
+	// GetServicePrincipal(ctx context.Context, userPrincipalName string) (*ServicePrincipal, error)
+
 	CollectSessionDataDirectly(ctx context.Context) <-chan AzureResult[azure.DeviceSessionData]
 	GetUserSignInActivity(ctx context.Context, userPrincipalName string, days int) ([]SignInEvent, error)
 	GetDeviceSignInActivity(ctx context.Context, deviceId string, days int) ([]SignInEvent, error)

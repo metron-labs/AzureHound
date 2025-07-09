@@ -4,6 +4,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -173,6 +174,7 @@ func (s *azureClient) processSignInLogsSimple(signInLogs []SignInEvent) []azure.
 
 	for deviceKey, sessions := range deviceGroups {
 		fmt.Printf("🔄 Processing device: %s (%d sessions)\n", deviceKey, len(sessions))
+		// FIXED: Call the correct function name
 		sessionData := s.createDeviceSessionData(deviceKey, sessions)
 		results = append(results, sessionData)
 	}
@@ -180,7 +182,7 @@ func (s *azureClient) processSignInLogsSimple(signInLogs []SignInEvent) []azure.
 	return results
 }
 
-// createDeviceSessionData creates session data for a device
+// createDeviceSessionData creates session data for a device (main function)
 func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignInEvent) azure.DeviceSessionData {
 	now := time.Now()
 
@@ -210,12 +212,16 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 	userMap := make(map[string]bool)
 
 	adminCount := 0
+	serviceCount := 0
 	suspiciousActivities := []azure.SuspiciousActivity{}
 
 	for i, signIn := range signIns {
 		// Only process successful sign-ins
 		if signIn.Status.ErrorCode == 0 {
-			isAdmin := isAdminUser(signIn.UserPrincipalName)
+			// FIXED: Use the correct function names with fallback approach
+			isAdmin := s.isAdminUserEnhanced(context.Background(), signIn.UserPrincipalName)
+			isService := s.isServiceUserEnhanced(context.Background(), signIn.UserPrincipalName)
+
 			if isAdmin {
 				adminCount++
 			}
@@ -237,6 +243,11 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 			// Add unique users
 			if !userMap[signIn.UserPrincipalName] {
 				userMap[signIn.UserPrincipalName] = true
+
+				if isService {
+					serviceCount++
+				}
+
 				user := azure.LoggedOnUser{
 					UserName:         getUsernameFromUPN(signIn.UserPrincipalName),
 					DomainName:       getDomainFromUPN(signIn.UserPrincipalName),
@@ -246,7 +257,7 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 					LogonTime:        signIn.CreatedDateTime,
 					LogonServer:      "login.microsoftonline.com",
 					HasCachedCreds:   true,
-					IsServiceAccount: isServiceUser(signIn.UserPrincipalName),
+					IsServiceAccount: isService,
 					TokenPrivileges:  getTokenPrivileges(isAdmin),
 				}
 				loggedOnUsers = append(loggedOnUsers, user)
@@ -282,7 +293,7 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 		SecurityIndicators: azure.SessionSecurityInfo{
 			AdminSessionsActive:     adminCount > 0,
 			RemoteSessionsActive:    false,
-			ServiceAccountSessions:  false,
+			ServiceAccountSessions:  serviceCount > 0,
 			CredentialTheftRisk:     getRiskLevel(adminCount),
 			PrivilegeEscalationRisk: getRiskLevel(adminCount),
 			SuspiciousActivities:    suspiciousActivities,
@@ -292,13 +303,13 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 			UniqueUsers:         len(loggedOnUsers),
 			AdminSessions:       adminCount,
 			RemoteSessions:      0,
-			ServiceSessions:     0,
+			ServiceSessions:     serviceCount,
 			CredentialExposure:  len(loggedOnUsers),
 		},
 	}
 
-	fmt.Printf("✅ Created session data for %s: %d sessions, %d users, %d admin sessions\n",
-		deviceInfo.DeviceName, len(activeSessions), len(loggedOnUsers), adminCount)
+	fmt.Printf("✅ Created session data for %s: %d sessions, %d users, %d admin sessions, %d service accounts\n",
+		deviceInfo.DeviceName, len(activeSessions), len(loggedOnUsers), adminCount, serviceCount)
 
 	return azure.DeviceSessionData{
 		Device:      deviceInfo,
@@ -307,7 +318,54 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 	}
 }
 
-// Helper functions
+// Helper functions for role detection
+func isAdminUserHeuristic(upn string) bool {
+	if upn == "" {
+		return false
+	}
+
+	lower := strings.ToLower(upn)
+	adminPatterns := []string{
+		"admin", "administrator", "root", "sysadmin", "systemadmin",
+		"domain-admin", "domainadmin", "global-admin", "globaladmin",
+		"tenant-admin", "it-admin", "adm-", "-adm",
+	}
+
+	for _, pattern := range adminPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isServiceUserHeuristic(upn string) bool {
+	if upn == "" {
+		return false
+	}
+
+	lower := strings.ToLower(upn)
+
+	// More comprehensive service account patterns
+	servicePatterns := []string{
+		"service", "svc", "srv", "system", "daemon", "app-",
+		"application", "azure-", "microsoft", "msonline", "sync_",
+		"exchange", "sharepoint", "teams", "bot", "automation",
+		"backup", "monitoring",
+	}
+
+	for _, pattern := range servicePatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+
+	// Check for machine account suffix or GUID-like names
+	return strings.HasSuffix(lower, "$") || isGUIDLike(upn)
+}
+
+// Utility helper functions
 func getComplianceString(isCompliant bool) string {
 	if isCompliant {
 		return "compliant"
@@ -352,17 +410,15 @@ func getIdleTime(logonTime time.Time) string {
 	duration := time.Since(logonTime)
 	hours := int(duration.Hours())
 	minutes := int(duration.Minutes()) % 60
-	return fmt.Sprintf("%02d:%02d:00", hours, minutes)
+	seconds := int(duration.Seconds()) % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 }
 
-func isAdminUser(upn string) bool {
-	lower := strings.ToLower(upn)
-	return strings.Contains(lower, "admin") || strings.Contains(lower, "root")
-}
-
-func isServiceUser(upn string) bool {
-	lower := strings.ToLower(upn)
-	return strings.Contains(lower, "service") || strings.Contains(lower, "svc") || strings.HasSuffix(lower, "$")
+// Helper function for GUID detection
+func isGUIDLike(s string) bool {
+	guidPattern := `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
+	matched, _ := regexp.MatchString(guidPattern, s)
+	return matched
 }
 
 func getTokenPrivileges(isAdmin bool) []string {

@@ -16,16 +16,3 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 package azure
-
-// Represents an Azure Active Directory object. The directoryObject type is the base type for many other directory entity types.
-type DirectoryObject struct {
-	// The unique identifier for the object.
-	// Note: The value is often but not exclusively a GUID (UUID v4 variant 2)
-	//
-	// Key
-	// Read-only
-	// Supports `filter` (eq,ne,NOT,in)
-	Id string `json:"id"`
-
-	Type string `json:"@odata.type,omitempty"`
-}
