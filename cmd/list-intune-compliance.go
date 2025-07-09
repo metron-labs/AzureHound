@@ -22,13 +22,13 @@ import (
 )
 
 func createBasicComplianceState(device intune.ManagedDevice, suffix string) intune.ComplianceState {
-    return intune.ComplianceState{
-        Id:         device.Id + suffix,
-        DeviceId:   device.Id,
-        DeviceName: device.DeviceName,
-        State:      device.ComplianceState,
-        Version:    1,
-    }
+	return intune.ComplianceState{
+		Id:         device.Id + suffix,
+		DeviceId:   device.Id,
+		DeviceName: device.DeviceName,
+		State:      device.ComplianceState,
+		Version:    1,
+	}
 }
 
 var (
@@ -38,7 +38,7 @@ var (
 
 func init() {
 	listRootCmd.AddCommand(listIntuneComplianceCmd)
-	
+
 	listIntuneComplianceCmd.Flags().StringVar(&complianceState, "state", "", "Filter by compliance state: compliant, noncompliant, conflict, error, unknown")
 	listIntuneComplianceCmd.Flags().BoolVar(&includeDetails, "details", false, "Include detailed compliance settings")
 }
@@ -87,7 +87,7 @@ func listIntuneCompliance(ctx context.Context, client client.AzureClient) <-chan
 
 		// First get all managed devices
 		devices := getComplianceTargetDevices(ctx, client)
-		
+
 		// Then collect compliance data for each device
 		collectDeviceCompliance(ctx, client, devices, out)
 	}()
@@ -136,69 +136,69 @@ func getComplianceTargetDevices(ctx context.Context, client client.AzureClient) 
 }
 
 func collectDeviceCompliance(ctx context.Context, client client.AzureClient, devices <-chan intune.ManagedDevice, out chan<- interface{}) {
-    var (
-        streams = pipeline.Demux(ctx.Done(), devices, config.ColStreamCount.Value().(int))
-        wg      sync.WaitGroup
-    )
+	var (
+		streams = pipeline.Demux(ctx.Done(), devices, config.ColStreamCount.Value().(int))
+		wg      sync.WaitGroup
+	)
 
-    wg.Add(len(streams))
-    for i := range streams {
-        stream := streams[i]
-        go func() {
-            defer panicrecovery.PanicRecovery()
-            defer wg.Done()
-            
-            for device := range stream {
-                if includeDetails {
-                    collectDetailedCompliance(ctx, client, device, out)
-                } else {
-                    basicCompliance := createBasicComplianceState(device, "-basic")
-                    select {
-                    case out <- NewAzureWrapper(enums.KindAZIntuneCompliance, basicCompliance):
-                    case <-ctx.Done():
-                        return
-                    }
-                }
-            }
-        }()
-    }
-    wg.Wait()
+	wg.Add(len(streams))
+	for i := range streams {
+		stream := streams[i]
+		go func() {
+			defer panicrecovery.PanicRecovery()
+			defer wg.Done()
+
+			for device := range stream {
+				if includeDetails {
+					collectDetailedCompliance(ctx, client, device, out)
+				} else {
+					basicCompliance := createBasicComplianceState(device, "-basic")
+					select {
+					case out <- NewAzureWrapper(enums.KindAZIntuneCompliance, basicCompliance):
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func collectDetailedCompliance(ctx context.Context, client client.AzureClient, device intune.ManagedDevice, out chan<- interface{}) {
-    log.V(2).Info("collecting detailed compliance", "device", device.DeviceName)
-    
-    params := query.GraphParams{}
-    count := 0
-    
-    for complianceResult := range client.GetIntuneDeviceCompliance(ctx, device.Id, params) {
-        if complianceResult.Error != nil {
-            log.Error(complianceResult.Error, "failed to get detailed compliance", "device", device.DeviceName)
-            
-            // Fall back to basic compliance info using helper
-            basicCompliance := createBasicComplianceState(device, "-fallback")
-            select {
-            case out <- NewAzureWrapper(enums.KindAZIntuneCompliance, basicCompliance):
-            case <-ctx.Done():
-                return
-            }
-            continue
-        }
+	log.V(2).Info("collecting detailed compliance", "device", device.DeviceName)
 
-        log.V(2).Info("found detailed compliance state", 
-            "device", device.DeviceName,
-            "state", complianceResult.Ok.State,
-            "settingsCount", len(complianceResult.Ok.SettingStates))
-        
-        count++
-        select {
-        case out <- NewAzureWrapper(enums.KindAZIntuneCompliance, complianceResult.Ok):
-        case <-ctx.Done():
-            return
-        }
-    }
-    
-    if count > 0 {
-        log.V(1).Info("finished detailed compliance collection", "device", device.DeviceName, "policies", count)
-    }
+	params := query.GraphParams{}
+	count := 0
+
+	for complianceResult := range client.GetIntuneDeviceCompliance(ctx, device.Id, params) {
+		if complianceResult.Error != nil {
+			log.Error(complianceResult.Error, "failed to get detailed compliance", "device", device.DeviceName)
+
+			// Fall back to basic compliance info using helper
+			basicCompliance := createBasicComplianceState(device, "-fallback")
+			select {
+			case out <- NewAzureWrapper(enums.KindAZIntuneCompliance, basicCompliance):
+			case <-ctx.Done():
+				return
+			}
+			continue
+		}
+
+		log.V(2).Info("found detailed compliance state",
+			"device", device.DeviceName,
+			"state", complianceResult.Ok.State,
+			"settingsCount", len(complianceResult.Ok.SettingStates))
+
+		count++
+		select {
+		case out <- NewAzureWrapper(enums.KindAZIntuneCompliance, complianceResult.Ok):
+		case <-ctx.Done():
+			return
+		}
+	}
+
+	if count > 0 {
+		log.V(1).Info("finished detailed compliance collection", "device", device.DeviceName, "policies", count)
+	}
 }

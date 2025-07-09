@@ -36,6 +36,30 @@ import (
 	"github.com/bloodhoundad/azurehound/v2/pipeline"
 )
 
+// SignInEvent represents a sign-in event from Microsoft Graph
+type SignInEvent struct {
+	ID                string    `json:"id"`
+	CreatedDateTime   time.Time `json:"createdDateTime"`
+	UserDisplayName   string    `json:"userDisplayName"`
+	UserPrincipalName string    `json:"userPrincipalName"`
+	UserId            string    `json:"userId"`
+	AppDisplayName    string    `json:"appDisplayName"`
+	ClientAppUsed     string    `json:"clientAppUsed"`
+	IPAddress         string    `json:"ipAddress"`
+	IsInteractive     bool      `json:"isInteractive"`
+	Status            struct {
+		ErrorCode int `json:"errorCode"`
+	} `json:"status"`
+	DeviceDetail struct {
+		DeviceId        string `json:"deviceId"`
+		DisplayName     string `json:"displayName"`
+		OperatingSystem string `json:"operatingSystem"`
+		IsCompliant     bool   `json:"isCompliant"`
+	} `json:"deviceDetail"`
+	RiskState           string `json:"riskState"`
+	RiskLevelAggregated string `json:"riskLevelAggregated"`
+}
+
 func NewClient(config config.Config) (AzureClient, error) {
 	if msgraph, err := rest.NewRestClient(config.GraphUrl(), config); err != nil {
 		return nil, err
@@ -233,6 +257,14 @@ type AzureClient interface {
 
 	TenantInfo() azure.Tenant
 	CloseIdleConnections()
+
+	// New methods for role detection
+	GetUserDirectoryRoles(ctx context.Context, userPrincipalName string) ([]azure.DirectoryRole, error)
+	GetUserMemberOf(ctx context.Context, userPrincipalName string) ([]azure.DirectoryObject, error)
+
+	CollectSessionDataDirectly(ctx context.Context) <-chan AzureResult[azure.DeviceSessionData]
+	GetUserSignInActivity(ctx context.Context, userPrincipalName string, days int) ([]SignInEvent, error)
+	GetDeviceSignInActivity(ctx context.Context, deviceId string, days int) ([]SignInEvent, error)
 
 	// Add Intune methods
 	ListIntuneManagedDevices(ctx context.Context, params query.GraphParams) <-chan AzureResult[intune.ManagedDevice]
