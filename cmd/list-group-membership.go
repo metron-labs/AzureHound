@@ -230,7 +230,7 @@ func convertToBloodHoundFormat(result *azure.GraphDataCollectionResult) azure.Bl
 				}
 
 				membership := azure.BloodHoundGroupMembership{
-					GroupId:          groupData.Group.Id,
+					GroupId:          groupData.Group.ID,
 					GroupName:        groupData.Group.DisplayName,
 					MemberId:         memberID,
 					MemberName:       memberName,
@@ -258,7 +258,7 @@ func convertToBloodHoundFormat(result *azure.GraphDataCollectionResult) azure.Bl
 				}
 
 				ownership := azure.BloodHoundGroupMembership{
-					GroupId:          groupData.Group.Id,
+					GroupId:          groupData.Group.ID,
 					GroupName:        groupData.Group.DisplayName,
 					MemberId:         ownerID,
 					MemberName:       ownerName,
@@ -274,7 +274,7 @@ func convertToBloodHoundFormat(result *azure.GraphDataCollectionResult) azure.Bl
 	for _, userData := range result.UserRoleAssignments {
 		for _, assignment := range userData.RoleAssignments {
 			roleAssignment := azure.BloodHoundUserRoleAssignment{
-				UserId:          userData.User.Id,
+				UserId:          userData.User.ID,
 				UserName:        userData.User.DisplayName,
 				RoleId:          assignment.AppRoleId.String(),
 				RoleName:        assignment.PrincipalDisplayName,

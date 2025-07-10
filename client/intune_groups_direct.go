@@ -82,7 +82,7 @@ func (s *azureClient) CollectGroupMembershipData(ctx context.Context) <-chan Azu
 			group := groupResult.Ok
 
 			// Use existing ListAzureADGroupMembers method - fix field name
-			members := s.ListAzureADGroupMembers(ctx, group.Id, query.GraphParams{})
+			members := s.ListAzureADGroupMembers(ctx, group.ID, query.GraphParams{})
 
 			var membersList []json.RawMessage
 			for memberResult := range members {
@@ -93,7 +93,7 @@ func (s *azureClient) CollectGroupMembershipData(ctx context.Context) <-chan Azu
 			}
 
 			// Use existing ListAzureADGroupOwners method - fix field name
-			owners := s.ListAzureADGroupOwners(ctx, group.Id, query.GraphParams{})
+			owners := s.ListAzureADGroupOwners(ctx, group.ID, query.GraphParams{})
 
 			var ownersList []json.RawMessage
 			for ownerResult := range owners {
@@ -135,7 +135,7 @@ func (s *azureClient) CollectUserRoleAssignments(ctx context.Context) <-chan Azu
 			user := userResult.Ok
 
 			// Get app role assignments for this user - fix field name
-			roleAssignments := s.ListUserAppRoleAssignments(ctx, user.Id, query.GraphParams{})
+			roleAssignments := s.ListUserAppRoleAssignments(ctx, user.ID, query.GraphParams{})
 
 			var assignments []azure.AppRoleAssignment
 			for assignmentResult := range roleAssignments {
@@ -194,7 +194,7 @@ func (s *azureClient) CollectDeviceAccessData(ctx context.Context) <-chan AzureR
 
 			if azureDevice != nil {
 				// Get registered users - fix field name
-				users := s.GetDeviceRegisteredUsers(ctx, azureDevice.Id, query.GraphParams{})
+				users := s.GetDeviceRegisteredUsers(ctx, azureDevice.ID, query.GraphParams{})
 				for userResult := range users {
 					if userResult.Error == nil {
 						registeredUsers = append(registeredUsers, userResult.Ok)
@@ -202,7 +202,7 @@ func (s *azureClient) CollectDeviceAccessData(ctx context.Context) <-chan AzureR
 				}
 
 				// Get registered owners - fix field name
-				owners := s.GetDeviceRegisteredOwners(ctx, azureDevice.Id, query.GraphParams{})
+				owners := s.GetDeviceRegisteredOwners(ctx, azureDevice.ID, query.GraphParams{})
 				for ownerResult := range owners {
 					if ownerResult.Error == nil {
 						registeredOwners = append(registeredOwners, ownerResult.Ok)
