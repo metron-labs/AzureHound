@@ -13,50 +13,69 @@ import (
 	"github.com/bloodhoundad/azurehound/v2/models/intune"
 )
 
-func setDefaultParams(params *query.GraphParams) {
-    if params.Top == 0 {
-        params.Top = 999
-    }
+func setDefaultParams(params query.GraphParams) query.GraphParams {
+	if params.Top == 0 {
+		params.Top = 999
+	}
+	return params
 }
 
 // ListIntuneManagedDevices retrieves all managed devices from Intune
 // GET /deviceManagement/managedDevices
 func (s *azureClient) ListIntuneManagedDevices(ctx context.Context, params query.GraphParams) <-chan AzureResult[intune.ManagedDevice] {
-    var (
-        out  = make(chan AzureResult[intune.ManagedDevice])
-        path = fmt.Sprintf("/%s/deviceManagement/managedDevices", constants.GraphApiVersion)
-    )
+	var (
+		out  = make(chan AzureResult[intune.ManagedDevice])
+		path = fmt.Sprintf("/%s/deviceManagement/managedDevices", constants.GraphApiVersion)
+	)
 
-    setDefaultParams(&params)
+	params = setDefaultParams(params)
 
-    go getAzureObjectList[intune.ManagedDevice](s.msgraph, ctx, path, params, out)
-    return out
+	go getAzureObjectList[intune.ManagedDevice](s.msgraph, ctx, path, params, out)
+	return out
 }
 
 // GetIntuneDeviceCompliance retrieves compliance information for a specific device
 // GET /deviceManagement/managedDevices/{id}/deviceCompliancePolicyStates
 func (s *azureClient) GetIntuneDeviceCompliance(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[intune.ComplianceState] {
-    var (
-        out  = make(chan AzureResult[intune.ComplianceState])
-        path = fmt.Sprintf("/%s/deviceManagement/managedDevices/%s/deviceCompliancePolicyStates", constants.GraphApiVersion, deviceId)
-    )
+	if deviceId == "" {
+		out := make(chan AzureResult[intune.ComplianceState])
+		go func() {
+			defer close(out)
+			out <- AzureResult[intune.ComplianceState]{Error: fmt.Errorf("deviceId cannot be empty")}
+		}()
+		return out
+	}
 
-    setDefaultParams(&params)
+	var (
+		out  = make(chan AzureResult[intune.ComplianceState])
+		path = fmt.Sprintf("/%s/deviceManagement/managedDevices/%s/deviceCompliancePolicyStates", constants.GraphApiVersion, deviceId)
+	)
 
-    go getAzureObjectList[intune.ComplianceState](s.msgraph, ctx, path, params, out)
-    return out
+	params = setDefaultParams(params)
+
+	go getAzureObjectList[intune.ComplianceState](s.msgraph, ctx, path, params, out)
+	return out
 }
 
 // GetIntuneDeviceConfiguration retrieves configuration information for a specific device
 // GET /deviceManagement/managedDevices/{id}/deviceConfigurationStates
 func (s *azureClient) GetIntuneDeviceConfiguration(ctx context.Context, deviceId string, params query.GraphParams) <-chan AzureResult[intune.ConfigurationState] {
-    var (
-        out  = make(chan AzureResult[intune.ConfigurationState])
-        path = fmt.Sprintf("/%s/deviceManagement/managedDevices/%s/deviceConfigurationStates", constants.GraphApiVersion, deviceId)
-    )
+	if deviceId == "" {
+		out := make(chan AzureResult[intune.ConfigurationState])
+		go func() {
+			defer close(out)
+			out <- AzureResult[intune.ConfigurationState]{Error: fmt.Errorf("deviceId cannot be empty")}
+		}()
+		return out
+	}
 
-    setDefaultParams(&params)
+	var (
+		out  = make(chan AzureResult[intune.ConfigurationState])
+		path = fmt.Sprintf("/%s/deviceManagement/managedDevices/%s/deviceConfigurationStates", constants.GraphApiVersion, deviceId)
+	)
 
-    go getAzureObjectList[intune.ConfigurationState](s.msgraph, ctx, path, params, out)
-    return out
+	params = setDefaultParams(params)
+
+	go getAzureObjectList[intune.ConfigurationState](s.msgraph, ctx, path, params, out)
+	return out
 }
