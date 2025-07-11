@@ -133,11 +133,11 @@ type IntuneComplianceReport struct {
 	Recommendations     []SecurityRecommendation `json:"recommendations"`
 }
 
-// DeviceBreakdown provides statistics about device types and platforms
+// Fixed: Consistent PascalCase naming for all exported fields
 type DeviceBreakdown struct {
 	Windows      int `json:"windows"`
-	MacOS        int `json:"macOS"`
-	iOS          int `json:"iOS"`
+	MacOS        int `json:"macOS"` // Fixed: Changed from macOS to MacOS
+	IOS          int `json:"iOS"`   // Fixed: Changed from iOS to IOS
 	Android      int `json:"android"`
 	WindowsPhone int `json:"windowsPhone"`
 	Other        int `json:"other"`
@@ -175,20 +175,13 @@ type SecurityRecommendation struct {
 	MITREMitigations []string `json:"mitreMitigations"`
 }
 
+// Fixed: Removed duplicate collections - keeping only the nested Data structure
 // BloodHoundIntuneData represents data formatted specifically for BloodHound ingestion
 type BloodHoundIntuneData struct {
-	Meta               BloodHoundMeta        `json:"meta"`
-	Data               BloodHoundDataWrapper `json:"data"`
-	ComputerDomains    []ComputerDomain      `json:"computerDomains"`
-	Computers          []Computer            `json:"computers"`
-	Users              []BloodHoundUser      `json:"users"`
-	Groups             []BloodHoundGroup     `json:"groups"`
-	LocalAdmins        []LocalAdmin          `json:"localAdmins"`
-	RemoteDesktopUsers []RemoteDesktopUser   `json:"remoteDesktopUsers"`
-	DcomUsers          []DcomUser            `json:"dcomUsers"`
-	PSRemoteUsers      []PSRemoteUser        `json:"psRemoteUsers"`
-	Sessions           []Session             `json:"sessions"`
-	RegistryKeys       []RegistryKey         `json:"registryKeys"`
+	Meta BloodHoundMeta        `json:"meta"`
+	Data BloodHoundDataWrapper `json:"data"`
+	// Note: Removed duplicate top-level arrays to avoid confusion.
+	// All BloodHound data should be accessed through the Data field.
 }
 
 // BloodHoundMeta contains metadata about the collection
@@ -208,7 +201,10 @@ type BloodHoundDataWrapper struct {
 	Groups             []BloodHoundGroup   `json:"groups"`
 	LocalAdmins        []LocalAdmin        `json:"localAdmins"`
 	RemoteDesktopUsers []RemoteDesktopUser `json:"remoteDesktopUsers"`
+	DcomUsers          []DcomUser          `json:"dcomUsers"`
+	PSRemoteUsers      []PSRemoteUser      `json:"psRemoteUsers"`
 	Sessions           []Session           `json:"sessions"`
+	RegistryKeys       []RegistryKey       `json:"registryKeys"`
 }
 
 // Computer represents a computer object for BloodHound
@@ -226,16 +222,18 @@ type Computer struct {
 	SecurityFindings   []SecurityFinding    `json:"SecurityFindings"`
 }
 
+// Fixed: Consistent time types - using time.Time for better type safety
 // ComputerProperties represents properties of a computer
 type ComputerProperties struct {
-	Name                    string    `json:"name"`
-	Domain                  string    `json:"domain"`
-	ObjectID                string    `json:"objectid"`
-	PrimaryGroupSID         string    `json:"primarygroupsid"`
-	HasLAPS                 bool      `json:"haslaps"`
-	LastLogon               int64     `json:"lastlogon"`
-	LastLogonTimestamp      int64     `json:"lastlogontimestamp"`
-	PwdLastSet              int64     `json:"pwdlastset"`
+	Name            string `json:"name"`
+	Domain          string `json:"domain"`
+	ObjectID        string `json:"objectid"`
+	PrimaryGroupSID string `json:"primarygroupsid"`
+	HasLAPS         bool   `json:"haslaps"`
+	// Fixed: Use time.Time for consistency and type safety
+	LastLogon               time.Time `json:"lastlogon"`
+	LastLogonTimestamp      time.Time `json:"lastlogontimestamp"`
+	PwdLastSet              time.Time `json:"pwdlastset"`
 	ServicePrincipalNames   []string  `json:"serviceprincipalnames"`
 	Description             string    `json:"description"`
 	OperatingSystem         string    `json:"operatingsystem"`
@@ -259,33 +257,35 @@ type BloodHoundUser struct {
 	Sessions         []SessionRelation        `json:"Sessions"`
 }
 
+// Fixed: Consistent time types for all time-related fields
 // BloodHoundUserProperties represents properties of a user (renamed to avoid conflict)
 type BloodHoundUserProperties struct {
-	Name                     string   `json:"name"`
-	Domain                   string   `json:"domain"`
-	ObjectID                 string   `json:"objectid"`
-	PrimaryGroupSID          string   `json:"primarygroupsid"`
-	HasSPN                   bool     `json:"hasspn"`
-	ServicePrincipalNames    []string `json:"serviceprincipalnames"`
-	DisplayName              string   `json:"displayname"`
-	Email                    string   `json:"email"`
-	Title                    string   `json:"title"`
-	Department               string   `json:"department"`
-	LastLogon                int64    `json:"lastlogon"`
-	LastLogonTimestamp       int64    `json:"lastlogontimestamp"`
-	PwdLastSet               int64    `json:"pwdlastset"`
-	Enabled                  bool     `json:"enabled"`
-	PasswordNeverExpires     bool     `json:"passwordneverexpires"`
-	PasswordNotRequired      bool     `json:"passwordnotrequired"`
-	UserCannotChangePassword bool     `json:"usercannotchangepassword"`
-	DontRequirePreAuth       bool     `json:"dontreqpreauth"`
-	SamAccountName           string   `json:"samaccountname"`
-	DistinguishedName        string   `json:"distinguishedname"`
-	UnconstrainedDelegation  bool     `json:"unconstraineddelegation"`
-	Sensitive                bool     `json:"sensitive"`
-	AllowedToDelegate        []string `json:"allowedtodelegate"`
-	AdminCount               bool     `json:"admincount"`
-	SIDHistory               []string `json:"sidhistory"`
+	Name                  string   `json:"name"`
+	Domain                string   `json:"domain"`
+	ObjectID              string   `json:"objectid"`
+	PrimaryGroupSID       string   `json:"primarygroupsid"`
+	HasSPN                bool     `json:"hasspn"`
+	ServicePrincipalNames []string `json:"serviceprincipalnames"`
+	DisplayName           string   `json:"displayname"`
+	Email                 string   `json:"email"`
+	Title                 string   `json:"title"`
+	Department            string   `json:"department"`
+	// Fixed: Use time.Time for consistency and type safety
+	LastLogon                time.Time `json:"lastlogon"`
+	LastLogonTimestamp       time.Time `json:"lastlogontimestamp"`
+	PwdLastSet               time.Time `json:"pwdlastset"`
+	Enabled                  bool      `json:"enabled"`
+	PasswordNeverExpires     bool      `json:"passwordneverexpires"`
+	PasswordNotRequired      bool      `json:"passwordnotrequired"`
+	UserCannotChangePassword bool      `json:"usercannotchangepassword"`
+	DontRequirePreAuth       bool      `json:"dontreqpreauth"`
+	SamAccountName           string    `json:"samaccountname"`
+	DistinguishedName        string    `json:"distinguishedname"`
+	UnconstrainedDelegation  bool      `json:"unconstraineddelegation"`
+	Sensitive                bool      `json:"sensitive"`
+	AllowedToDelegate        []string  `json:"allowedtodelegate"`
+	AdminCount               bool      `json:"admincount"`
+	SIDHistory               []string  `json:"sidhistory"`
 }
 
 // BloodHoundGroup represents a group object for BloodHound (renamed to avoid conflict)

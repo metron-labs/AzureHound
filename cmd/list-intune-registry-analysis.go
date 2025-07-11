@@ -13,13 +13,37 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	fullAnalysis   bool // New flag for choosing analysis mode
+	skipValidation bool // New flag to skip script validation
+)
+
 func init() {
 	listRootCmd.AddCommand(listIntuneRegistryAnalysisCmd)
+
+	// Add command-line flags for analysis options
+	listIntuneRegistryAnalysisCmd.Flags().BoolVar(&fullAnalysis, "full", false, "Perform full registry analysis with script execution (requires deployed script)")
+	listIntuneRegistryAnalysisCmd.Flags().BoolVar(&skipValidation, "skip-validation", false, "Skip script deployment validation")
 }
 
 var listIntuneRegistryAnalysisCmd = &cobra.Command{
-	Use:          "intune-registry-analysis",
-	Long:         "Performs security analysis on collected registry data and formats for BloodHound",
+	Use:   "intune-registry-analysis",
+	Short: "Performs security analysis on Intune devices and formats for BloodHound",
+	Long: `Performs security analysis on collected registry data and formats for BloodHound.
+
+Analysis Modes:
+  Basic Mode (default): Analyzes devices based on Intune compliance data only
+  Full Mode (--full):   Executes PowerShell scripts to collect and analyze registry data
+
+Examples:
+  # Basic analysis (compliance-based)
+  azurehound list intune-registry-analysis --jwt $JWT
+
+  # Full analysis with script execution
+  azurehound list intune-registry-analysis --full --jwt $JWT
+
+  # Skip script validation (useful for testing)
+  azurehound list intune-registry-analysis --full --skip-validation --jwt $JWT`,
 	Run:          listIntuneRegistryAnalysisCmdImpl,
 	SilenceUsage: true,
 }
@@ -30,20 +54,45 @@ func listIntuneRegistryAnalysisCmdImpl(cmd *cobra.Command, args []string) {
 
 	azClient := connectAndCreateClient()
 
-	// Skip script validation for now
-	fmt.Printf("Skipping script validation - proceeding with device analysis")
+	var analysisResults []azure.DeviceSecurityAnalysis
+	var err error
 
-	if analysisResults, err := performDeviceAnalysisWithoutScripts(ctx, azClient); err != nil {
-		exit(err)
+	if fullAnalysis {
+		fmt.Printf("🔍 Starting FULL registry security analysis with script execution...\n")
+
+		// Validate script deployment unless skipped
+		if !skipValidation {
+			fmt.Printf("🔧 Validating script deployment...\n")
+			if err := azClient.ValidateScriptDeployment(ctx); err != nil {
+				fmt.Printf("❌ Script validation failed: %v\n", err)
+				fmt.Printf("💡 Use --skip-validation to bypass this check, or deploy the required PowerShell script first.\n")
+				exit(err)
+			}
+			fmt.Printf("✅ Script validation successful\n")
+		} else {
+			fmt.Printf("⚠️  Skipping script validation as requested\n")
+		}
+
+		analysisResults, err = performRealRegistrySecurityAnalysis(ctx, azClient)
+		if err != nil {
+			fmt.Printf("❌ Full analysis failed, falling back to basic analysis: %v\n", err)
+			analysisResults, err = performDeviceAnalysisWithoutScripts(ctx, azClient)
+		}
 	} else {
-		displayAnalysisResults(analysisResults)
+		fmt.Printf("📊 Starting BASIC device analysis (compliance-based)...\n")
+		analysisResults, err = performDeviceAnalysisWithoutScripts(ctx, azClient)
 	}
+
+	if err != nil {
+		exit(err)
+	}
+
+	displayAnalysisResults(analysisResults)
 }
 
-// cmd/list-intune-registry-analysis.go - Add this function
-
+// displayAnalysisResults shows the analysis results with emojis and formatting
 func displayAnalysisResults(results []azure.DeviceSecurityAnalysis) {
-	fmt.Printf("\n=== INTUNE DEVICE SECURITY ANALYSIS RESULTS ===\n\n")
+	fmt.Printf("\n=== 🛡️  INTUNE DEVICE SECURITY ANALYSIS RESULTS ===\n\n")
 
 	if len(results) == 0 {
 		fmt.Printf("❌ No devices were analyzed\n")
@@ -55,8 +104,8 @@ func displayAnalysisResults(results []azure.DeviceSecurityAnalysis) {
 	displaySummary(summary, len(results))
 
 	// Display detailed results for each device
-	fmt.Printf("📱 DEVICE DETAILS:\n")
-	fmt.Printf("═══════════════════════════════════════════════════════════════\n\n")
+	fmt.Printf("📋 DEVICE DETAILS:\n")
+	fmt.Printf("═══════════════════════════════════════════════════════════════════════\n\n")
 
 	for i, result := range results {
 		displayDeviceResult(i+1, result)
@@ -67,12 +116,12 @@ func displayAnalysisResults(results []azure.DeviceSecurityAnalysis) {
 }
 
 func displaySummary(summary map[string]interface{}, totalDevices int) {
-	fmt.Printf("📊 ANALYSIS SUMMARY\n")
-	fmt.Printf("─────────────────────────────────────────────────────────────\n")
+	fmt.Printf("📈 ANALYSIS SUMMARY\n")
+	fmt.Printf("─────────────────────────────────────────────────────────────────────\n")
 
 	// Compliance summary
 	if complianceSummary, ok := summary["compliance_summary"].(map[string]interface{}); ok {
-		fmt.Printf("🎯 Compliance Overview:\n")
+		fmt.Printf("✅ Compliance Overview:\n")
 		fmt.Printf("   • Total Devices: %d\n", totalDevices)
 		fmt.Printf("   • Compliant: %v\n", complianceSummary["compliant"])
 		fmt.Printf("   • Partially Compliant: %v\n", complianceSummary["partially_compliant"])
@@ -99,7 +148,7 @@ func displaySummary(summary map[string]interface{}, totalDevices int) {
 
 	// Device breakdown
 	if deviceBreakdown, ok := summary["device_breakdown"].(map[string]interface{}); ok {
-		fmt.Printf("🔍 Risk Distribution:\n")
+		fmt.Printf("🎯 Risk Distribution:\n")
 		fmt.Printf("   • High Risk (70-100): %v devices\n", deviceBreakdown["high_risk_devices"])
 		fmt.Printf("   • Medium Risk (30-69): %v devices\n", deviceBreakdown["medium_risk_devices"])
 		fmt.Printf("   • Low Risk (0-29): %v devices\n", deviceBreakdown["low_risk_devices"])
@@ -120,8 +169,8 @@ func displayDeviceResult(index int, result azure.DeviceSecurityAnalysis) {
 	fmt.Printf("   💻 OS: %s %s\n", result.Device.OperatingSystem, result.Device.OSVersion)
 	fmt.Printf("   👤 User: %s\n", getDisplayValue(result.Device.UserPrincipalName))
 	fmt.Printf("   📊 Risk Score: %d/100 (%s)\n", result.RiskScore, getRiskLevel(result.RiskScore))
-	fmt.Printf("   ✅ Compliance: %s\n", result.ComplianceStatus)
-	fmt.Printf("   🕒 Last Analysis: %s\n", result.AnalysisTimestamp.Format("2006-01-02 15:04:05"))
+	fmt.Printf("   ✓ Compliance: %s\n", result.ComplianceStatus)
+	fmt.Printf("   ⏰ Last Analysis: %s\n", result.AnalysisTimestamp.Format("2006-01-02 15:04:05"))
 	fmt.Printf("   🔄 Last Sync: %s\n", result.Device.LastSyncDateTime.Format("2006-01-02 15:04:05"))
 
 	// Security findings
@@ -156,7 +205,7 @@ func displayDeviceResult(index int, result azure.DeviceSecurityAnalysis) {
 
 	// Escalation vectors
 	if len(result.EscalationVectors) > 0 {
-		fmt.Printf("   ⚡ Privilege Escalation Vectors (%d):\n", len(result.EscalationVectors))
+		fmt.Printf("   ⬆️ Privilege Escalation Vectors (%d):\n", len(result.EscalationVectors))
 		for _, vector := range result.EscalationVectors {
 			fmt.Printf("      🎯 %s: %s → %s\n", vector.Type, vector.Source, vector.Target)
 			fmt.Printf("         Method: %s (Complexity: %s)\n", vector.Method, vector.Complexity)
@@ -187,15 +236,15 @@ func displayRecommendations(results []azure.DeviceSecurityAnalysis) {
 	}
 
 	if criticalCount > 0 || highCount > 0 || nonCompliantCount > 0 {
-		fmt.Printf("🎯 IMMEDIATE ACTIONS REQUIRED\n")
-		fmt.Printf("─────────────────────────────────────────────────────────────\n")
+		fmt.Printf("🚨 IMMEDIATE ACTIONS REQUIRED\n")
+		fmt.Printf("═══════════════════════════════════════════════════════════════════════\n")
 
 		if criticalCount > 0 {
 			fmt.Printf("🔥 CRITICAL: %d critical security issues need immediate attention\n", criticalCount)
 		}
 
 		if highCount > 0 {
-			fmt.Printf("🚨 HIGH: %d high-severity issues should be addressed soon\n", highCount)
+			fmt.Printf("⚠️ HIGH: %d high-severity issues should be addressed soon\n", highCount)
 		}
 
 		if nonCompliantCount > 0 {
@@ -210,7 +259,7 @@ func displayRecommendations(results []azure.DeviceSecurityAnalysis) {
 		fmt.Printf("   5. Consider additional endpoint protection measures\n\n")
 	} else {
 		fmt.Printf("✅ GOOD NEWS!\n")
-		fmt.Printf("─────────────────────────────────────────────────────────────\n")
+		fmt.Printf("═══════════════════════════════════════════════════════════════════════\n")
 		fmt.Printf("No critical security issues were found in the analyzed devices.\n")
 		fmt.Printf("Continue regular monitoring to maintain security posture.\n\n")
 	}
@@ -358,7 +407,7 @@ func countDevicesByRiskLevel(results []azure.DeviceSecurityAnalysis, minRisk, ma
 }
 
 func performDeviceAnalysisWithoutScripts(ctx context.Context, azClient client.AzureClient) ([]azure.DeviceSecurityAnalysis, error) {
-	fmt.Printf("Starting device analysis without script execution...")
+	fmt.Printf("📊 Starting device analysis without script execution...\n")
 
 	var results []azure.DeviceSecurityAnalysis
 
@@ -367,7 +416,7 @@ func performDeviceAnalysisWithoutScripts(ctx context.Context, azClient client.Az
 
 	for deviceResult := range devices {
 		if deviceResult.Error != nil {
-			fmt.Printf("Error getting device: %v", deviceResult.Error)
+			fmt.Printf("❌ Error getting device: %v\n", deviceResult.Error)
 			continue
 		}
 
@@ -383,7 +432,7 @@ func performDeviceAnalysisWithoutScripts(ctx context.Context, azClient client.Az
 		results = append(results, analysis)
 	}
 
-	fmt.Printf("Analyzed %d devices based on compliance data", len(results))
+	fmt.Printf("✅ Analyzed %d devices based on compliance data\n", len(results))
 	return results, nil
 }
 
@@ -441,14 +490,14 @@ func performRealRegistrySecurityAnalysis(ctx context.Context, azClient client.Az
 		errorCount   = 0
 	)
 
-	fmt.Printf("Starting real registry security analysis...")
+	fmt.Printf("🔍 Starting real registry security analysis...\n")
 
 	// Use the real registry collection function from your client
 	deviceRegistryData := azClient.CollectRegistryDataFromAllDevices(ctx)
 
 	for registryResult := range deviceRegistryData {
 		if registryResult.Error != nil {
-			fmt.Printf("Error collecting registry data: %v", registryResult.Error)
+			fmt.Printf("❌ Error collecting registry data: %v\n", registryResult.Error)
 			errorCount++
 			continue
 		}
@@ -462,13 +511,13 @@ func performRealRegistrySecurityAnalysis(ctx context.Context, azClient client.Az
 		out = append(out, analysis)
 		successCount++
 
-		fmt.Printf("Analyzed device %s: %d findings, risk score %d",
+		fmt.Printf("✅ Analyzed device %s: %d findings, risk score %d\n",
 			analysis.Device.DeviceName,
 			len(analysis.SecurityFindings),
 			analysis.RiskScore)
 	}
 
-	fmt.Printf("Registry analysis completed: %d successful, %d errors", successCount, errorCount)
+	fmt.Printf("📈 Registry analysis completed: %d successful, %d errors\n", successCount, errorCount)
 
 	if successCount == 0 && errorCount > 0 {
 		return nil, fmt.Errorf("failed to analyze any devices successfully (%d errors)", errorCount)

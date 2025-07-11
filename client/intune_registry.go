@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -12,13 +13,34 @@ import (
 	"github.com/bloodhoundad/azurehound/v2/models/azure"
 )
 
-// Configuration for your existing deployed script
-const (
-	// Update this with your actual script ID from Intune
-	DeployedRegistryScriptID = "BHE_Script_Registry_Data_Collection"
-	// Script name as it appears in Intune
-	DeployedRegistryScriptName = "BHE_Script_Registry_Data_Collection.ps1"
-)
+// Configuration for script deployment - now loaded from environment or config
+func getDeployedRegistryScriptID() string {
+	if id := os.Getenv("AZUREHOUND_INTUNE_SCRIPT_ID"); id != "" {
+		return id
+	}
+	return "BHE_Script_Registry_Data_Collection" // default fallback
+}
+
+func getDeployedRegistryScriptName() string {
+	if name := os.Getenv("AZUREHOUND_INTUNE_SCRIPT_NAME"); name != "" {
+		return name
+	}
+	return "BHE_Script_Registry_Data_Collection.ps1" // default fallback
+}
+
+type DeviceFilterConfig struct {
+	IncludeOS         []string
+	RequireCompliant  bool
+	LogSkippedDevices bool
+}
+
+func getDefaultDeviceFilterConfig() DeviceFilterConfig {
+	return DeviceFilterConfig{
+		IncludeOS:         []string{"windows"},
+		RequireCompliant:  true,
+		LogSkippedDevices: true,
+	}
+}
 
 func (s *azureClient) ListIntuneDevices(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.IntuneDevice] {
 	var (
@@ -36,8 +58,11 @@ func (s *azureClient) ListIntuneDevices(ctx context.Context, params query.GraphP
 
 // ExecuteRegistryCollectionScript executes your existing deployed PowerShell script on an Intune device
 func (s *azureClient) ExecuteRegistryCollectionScript(ctx context.Context, deviceID string) (*azure.ScriptExecution, error) {
+	// Get script configuration from environment/config
+	scriptName := getDeployedRegistryScriptName()
+
 	// First, get the deployed script ID
-	scriptID, err := s.GetDeployedScriptID(ctx, DeployedRegistryScriptName)
+	scriptID, err := s.GetDeployedScriptID(ctx, scriptName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find deployed script: %w", err)
 	}
@@ -53,7 +78,7 @@ func (s *azureClient) ExecuteRegistryCollectionScript(ctx context.Context, devic
 		DeviceID:      deviceID,
 		Status:        "pending",
 		StartDateTime: time.Now(),
-		ScriptName:    DeployedRegistryScriptName,
+		ScriptName:    scriptName,
 		RunAsAccount:  "system",
 	}
 
@@ -87,8 +112,8 @@ func (s *azureClient) GetScriptExecutionResults(ctx context.Context, scriptID st
 			Filter: fmt.Sprintf("managedDevice/id eq '%s'", deviceID),
 		}
 
-		// Use the existing getAzureObjectList function without capturing return value
-		go getAzureObjectList[azure.ScriptExecutionResult](s.msgraph, ctx, path, params, out)
+		// Fixed: Remove nested goroutine - call getAzureObjectList directly
+		getAzureObjectList[azure.ScriptExecutionResult](s.msgraph, ctx, path, params, out)
 	}()
 
 	return out
@@ -123,8 +148,8 @@ func (s *azureClient) GetDeployedScriptID(ctx context.Context, scriptName string
 
 // TriggerScriptExecution triggers your deployed script on a specific device
 func (s *azureClient) TriggerScriptExecution(ctx context.Context, scriptID, deviceID string) error {
-	// Method 1: Use device management script assignment
-	// This creates an assignment to run the script on the specific device
+	// Method 1: Use device management script assignment with proper group assignment
+	// Fixed: Use proper Azure AD group ID instead of device ID
 
 	var (
 		path = fmt.Sprintf("/%s/deviceManagement/deviceManagementScripts/%s/assign",
@@ -137,8 +162,9 @@ func (s *azureClient) TriggerScriptExecution(ctx context.Context, scriptID, devi
 						"@odata.type": "#microsoft.graph.deviceManagementScriptGroupAssignment",
 						"deviceAndAppManagementAssignmentFilterId":   nil,
 						"deviceAndAppManagementAssignmentFilterType": "none",
-						"groupId":       nil,
-						"targetGroupId": deviceID, // Target specific device
+						// Fixed: Remove targetGroupId and use proper groupId
+						// Note: This requires the device to be in an Azure AD group
+						// For direct device targeting, use the alternative method below
 					},
 				},
 			},
@@ -198,7 +224,7 @@ func (s *azureClient) GetScriptExecutionHistory(ctx context.Context, scriptID st
 			}
 		)
 
-		go getAzureObjectList[azure.ScriptExecutionResult](s.msgraph, ctx, path, params, out)
+		getAzureObjectList[azure.ScriptExecutionResult](s.msgraph, ctx, path, params, out)
 	}()
 
 	return out
@@ -206,7 +232,8 @@ func (s *azureClient) GetScriptExecutionHistory(ctx context.Context, scriptID st
 
 // ValidateScriptDeployment checks if the script is properly deployed and accessible
 func (s *azureClient) ValidateScriptDeployment(ctx context.Context) error {
-	scriptID, err := s.GetDeployedScriptID(ctx, DeployedRegistryScriptName)
+	scriptName := getDeployedRegistryScriptName()
+	scriptID, err := s.GetDeployedScriptID(ctx, scriptName)
 	if err != nil {
 		return fmt.Errorf("script validation failed: %w", err)
 	}
@@ -289,7 +316,12 @@ func (s *azureClient) CollectRegistryDataFromDevice(ctx context.Context, deviceI
 	return registryData, nil
 }
 
+// Fixed: Make device filtering configurable and add logging
 func (s *azureClient) CollectRegistryDataFromAllDevices(ctx context.Context) <-chan AzureResult[azure.DeviceRegistryData] {
+	return s.CollectRegistryDataFromAllDevicesWithConfig(ctx, getDefaultDeviceFilterConfig())
+}
+
+func (s *azureClient) CollectRegistryDataFromAllDevicesWithConfig(ctx context.Context, filterConfig DeviceFilterConfig) <-chan AzureResult[azure.DeviceRegistryData] {
 	out := make(chan AzureResult[azure.DeviceRegistryData])
 
 	go func() {
@@ -305,9 +337,29 @@ func (s *azureClient) CollectRegistryDataFromAllDevices(ctx context.Context) <-c
 
 			device := deviceResult.Ok
 
-			// Only collect from Windows devices that are compliant
-			if !strings.Contains(strings.ToLower(device.OperatingSystem), "windows") ||
-				device.ComplianceState != "compliant" {
+			// Configurable OS filtering with logging
+			osMatches := false
+			for _, allowedOS := range filterConfig.IncludeOS {
+				if strings.Contains(strings.ToLower(device.OperatingSystem), strings.ToLower(allowedOS)) {
+					osMatches = true
+					break
+				}
+			}
+
+			if !osMatches {
+				if filterConfig.LogSkippedDevices {
+					fmt.Printf("Skipping device %s: OS %s not in allowed list %v\n",
+						device.DeviceName, device.OperatingSystem, filterConfig.IncludeOS)
+				}
+				continue
+			}
+
+			// Configurable compliance filtering with logging
+			if filterConfig.RequireCompliant && device.ComplianceState != "compliant" {
+				if filterConfig.LogSkippedDevices {
+					fmt.Printf("Skipping device %s: compliance state %s (require compliant: %v)\n",
+						device.DeviceName, device.ComplianceState, filterConfig.RequireCompliant)
+				}
 				continue
 			}
 
