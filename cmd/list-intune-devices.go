@@ -72,17 +72,17 @@ func listIntuneDevices(ctx context.Context, azClient client.AzureClient) ([]azur
 }
 
 // Helper function to create client with proper error handling
-func connectAndCreateClientWithError() (client.AzureClient, error) {
-	// This function should be implemented to return both client and error
-	// For now, we'll assume connectAndCreateClient() exists and wrap it
-	// In a real implementation, you'd modify the original function or create a new one
+// Helper function to create client with proper error handling
+func connectAndCreateClientWithError() (azClient client.AzureClient, err error) {
+	// Use named return parameters to allow deferred function to modify them
 	defer func() {
 		if r := recover(); r != nil {
-			// Convert panic to error if the original function panics
-			panic(fmt.Errorf("failed to create client: %v", r))
+			// Convert panic to error instead of re-panicking
+			err = fmt.Errorf("failed to create client: %v", r)
+			azClient = nil
 		}
 	}()
 
-	azClient := connectAndCreateClient()
+	azClient = connectAndCreateClient()
 	return azClient, nil
 }
