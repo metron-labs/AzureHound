@@ -4,7 +4,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -318,53 +317,6 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 	}
 }
 
-// Helper functions for role detection
-func isAdminUserHeuristic(upn string) bool {
-	if upn == "" {
-		return false
-	}
-
-	lower := strings.ToLower(upn)
-	adminPatterns := []string{
-		"admin", "administrator", "root", "sysadmin", "systemadmin",
-		"domain-admin", "domainadmin", "global-admin", "globaladmin",
-		"tenant-admin", "it-admin", "adm-", "-adm",
-	}
-
-	for _, pattern := range adminPatterns {
-		if strings.Contains(lower, pattern) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func isServiceUserHeuristic(upn string) bool {
-	if upn == "" {
-		return false
-	}
-
-	lower := strings.ToLower(upn)
-
-	// More comprehensive service account patterns
-	servicePatterns := []string{
-		"service", "svc", "srv", "system", "daemon", "app-",
-		"application", "azure-", "microsoft", "msonline", "sync_",
-		"exchange", "sharepoint", "teams", "bot", "automation",
-		"backup", "monitoring",
-	}
-
-	for _, pattern := range servicePatterns {
-		if strings.Contains(lower, pattern) {
-			return true
-		}
-	}
-
-	// Check for machine account suffix or GUID-like names
-	return strings.HasSuffix(lower, "$") || isGUIDLike(upn)
-}
-
 // Utility helper functions
 func getComplianceString(isCompliant bool) string {
 	if isCompliant {
@@ -412,13 +364,6 @@ func getIdleTime(logonTime time.Time) string {
 	minutes := int(duration.Minutes()) % 60
 	seconds := int(duration.Seconds()) % 60
 	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
-}
-
-// Helper function for GUID detection
-func isGUIDLike(s string) bool {
-	guidPattern := `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
-	matched, _ := regexp.MatchString(guidPattern, s)
-	return matched
 }
 
 func getTokenPrivileges(isAdmin bool) []string {

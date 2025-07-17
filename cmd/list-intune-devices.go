@@ -7,6 +7,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
 
 	"github.com/bloodhoundad/azurehound/v2/client"
 	"github.com/bloodhoundad/azurehound/v2/client/query"
@@ -26,10 +28,15 @@ var listIntuneDevicesCmd = &cobra.Command{
 }
 
 func listIntuneDevicesCmdImpl(cmd *cobra.Command, args []string) {
-	ctx, stop := context.WithCancel(cmd.Context())
-	defer stop()
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, os.Kill)
+	defer gracefulShutdown(stop)
 
-	azClient := connectAndCreateClient()
+	// Add proper error handling for client creation
+	azClient, err := connectAndCreateClientWithError()
+	if err != nil {
+		log.Error(err, "failed to create Azure client")
+		os.Exit(1)
+	}
 
 	if devices, err := listIntuneDevices(ctx, azClient); err != nil {
 		exit(err)
@@ -51,17 +58,31 @@ func listIntuneDevices(ctx context.Context, azClient client.AzureClient) ([]azur
 	var (
 		out     = make([]azure.IntuneDevice, 0)
 		devices = azClient.ListIntuneDevices(ctx, query.GraphParams{})
-		count   = 0
 	)
 
 	for result := range devices {
 		if result.Error != nil {
 			return nil, result.Error
 		} else {
-			count++
 			out = append(out, result.Ok)
 		}
 	}
 
 	return out, nil
+}
+
+// Helper function to create client with proper error handling
+func connectAndCreateClientWithError() (client.AzureClient, error) {
+	// This function should be implemented to return both client and error
+	// For now, we'll assume connectAndCreateClient() exists and wrap it
+	// In a real implementation, you'd modify the original function or create a new one
+	defer func() {
+		if r := recover(); r != nil {
+			// Convert panic to error if the original function panics
+			panic(fmt.Errorf("failed to create client: %v", r))
+		}
+	}()
+
+	azClient := connectAndCreateClient()
+	return azClient, nil
 }

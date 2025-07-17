@@ -31,16 +31,11 @@ func createBasicComplianceState(device intune.ManagedDevice, suffix string) intu
 	}
 }
 
-var (
-	complianceState string
-	includeDetails  bool
-)
-
 func init() {
 	listRootCmd.AddCommand(listIntuneComplianceCmd)
 
-	listIntuneComplianceCmd.Flags().StringVar(&complianceState, "state", "", "Filter by compliance state: compliant, noncompliant, conflict, error, unknown")
-	listIntuneComplianceCmd.Flags().BoolVar(&includeDetails, "details", false, "Include detailed compliance settings")
+	listIntuneComplianceCmd.Flags().StringP("state", "s", "", "Filter by compliance state: compliant, noncompliant, conflict, error, unknown")
+	listIntuneComplianceCmd.Flags().BoolP("details", "d", false, "Include detailed compliance settings")
 }
 
 var listIntuneComplianceCmd = &cobra.Command{
@@ -65,18 +60,22 @@ func listIntuneComplianceCmdImpl(cmd *cobra.Command, args []string) {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, os.Kill)
 	defer gracefulShutdown(stop)
 
+	// Get flag values locally to avoid global variable issues
+	complianceState, _ := cmd.Flags().GetString("state")
+	includeDetails, _ := cmd.Flags().GetBool("details")
+
 	log.V(1).Info("testing connections")
 	azClient := connectAndCreateClient()
 	log.Info("collecting intune device compliance...")
 	start := time.Now()
-	stream := listIntuneCompliance(ctx, azClient)
+	stream := listIntuneCompliance(ctx, azClient, complianceState, includeDetails)
 	panicrecovery.HandleBubbledPanic(ctx, stop, log)
 	outputStream(ctx, stream)
 	duration := time.Since(start)
 	log.Info("collection completed", "duration", duration.String())
 }
 
-func listIntuneCompliance(ctx context.Context, client client.AzureClient) <-chan interface{} {
+func listIntuneCompliance(ctx context.Context, client client.AzureClient, complianceState string, includeDetails bool) <-chan interface{} {
 	var (
 		out = make(chan interface{})
 	)
@@ -86,16 +85,16 @@ func listIntuneCompliance(ctx context.Context, client client.AzureClient) <-chan
 		defer close(out)
 
 		// First get all managed devices
-		devices := getComplianceTargetDevices(ctx, client)
+		devices := getComplianceTargetDevices(ctx, client, complianceState)
 
 		// Then collect compliance data for each device
-		collectDeviceCompliance(ctx, client, devices, out)
+		collectDeviceCompliance(ctx, client, devices, out, includeDetails)
 	}()
 
 	return out
 }
 
-func getComplianceTargetDevices(ctx context.Context, client client.AzureClient) <-chan intune.ManagedDevice {
+func getComplianceTargetDevices(ctx context.Context, client client.AzureClient, complianceState string) <-chan intune.ManagedDevice {
 	var (
 		out    = make(chan intune.ManagedDevice)
 		params = query.GraphParams{
@@ -135,7 +134,7 @@ func getComplianceTargetDevices(ctx context.Context, client client.AzureClient) 
 	return out
 }
 
-func collectDeviceCompliance(ctx context.Context, client client.AzureClient, devices <-chan intune.ManagedDevice, out chan<- interface{}) {
+func collectDeviceCompliance(ctx context.Context, client client.AzureClient, devices <-chan intune.ManagedDevice, out chan<- interface{}, includeDetails bool) {
 	var (
 		streams = pipeline.Demux(ctx.Done(), devices, config.ColStreamCount.Value().(int))
 		wg      sync.WaitGroup
@@ -182,7 +181,7 @@ func collectDetailedCompliance(ctx context.Context, client client.AzureClient, d
 			case <-ctx.Done():
 				return
 			}
-			continue
+			return // Changed from continue to return as suggested
 		}
 
 		log.V(2).Info("found detailed compliance state",

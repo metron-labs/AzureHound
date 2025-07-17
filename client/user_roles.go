@@ -5,11 +5,31 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/bloodhoundad/azurehound/v2/client/query"
 	"github.com/bloodhoundad/azurehound/v2/models/azure"
 )
+
+// Package-level constants for admin role names
+var adminRoleNames = map[string]bool{
+	"global administrator":                    true,
+	"privileged role administrator":           true,
+	"security administrator":                  true,
+	"user administrator":                      true,
+	"helpdesk administrator":                  true,
+	"exchange administrator":                  true,
+	"sharepoint administrator":                true,
+	"teams administrator":                     true,
+	"intune administrator":                    true,
+	"cloud application administrator":         true,
+	"application administrator":               true,
+	"authentication administrator":            true,
+	"privileged authentication administrator": true,
+	"directory readers":                       true,
+	"directory writers":                       true,
+}
 
 // MemberOfObject represents objects returned by memberOf API
 type MemberOfObject struct {
@@ -20,7 +40,9 @@ type MemberOfObject struct {
 
 // GetUserMemberOf gets all groups and roles a user belongs to
 func (s *azureClient) GetUserMemberOf(ctx context.Context, userPrincipalName string) ([]azure.DirectoryObject, error) {
-	path := fmt.Sprintf("/beta/users/%s/memberOf", userPrincipalName)
+	// URL encode the userPrincipalName to handle special characters
+	encodedUPN := url.QueryEscape(userPrincipalName)
+	path := fmt.Sprintf("/v1.0/users/%s/memberOf", encodedUPN)
 
 	params := query.GraphParams{
 		Select: []string{"id", "displayName", "@odata.type"},
@@ -53,25 +75,6 @@ func (s *azureClient) isAdminUserEnhanced(ctx context.Context, userPrincipalName
 	if err != nil {
 		// Fall back to heuristic if API fails
 		return isAdminUserHeuristic(userPrincipalName)
-	}
-
-	// Define admin role names and admin group patterns
-	adminRoleNames := map[string]bool{
-		"global administrator":                    true,
-		"privileged role administrator":           true,
-		"security administrator":                  true,
-		"user administrator":                      true,
-		"helpdesk administrator":                  true,
-		"exchange administrator":                  true,
-		"sharepoint administrator":                true,
-		"teams administrator":                     true,
-		"intune administrator":                    true,
-		"cloud application administrator":         true,
-		"application administrator":               true,
-		"authentication administrator":            true,
-		"privileged authentication administrator": true,
-		"directory readers":                       true,
-		"directory writers":                       true,
 	}
 
 	adminGroupPatterns := []string{
@@ -134,10 +137,12 @@ func (s *azureClient) isServiceUserEnhanced(ctx context.Context, userPrincipalNa
 
 // Alternative: Get only directory roles (more specific for admin detection)
 func (s *azureClient) GetUserDirectoryRoles(ctx context.Context, userPrincipalName string) ([]azure.DirectoryRole, error) {
-	path := fmt.Sprintf("/beta/users/%s/memberOf", userPrincipalName)
+	// URL encode the userPrincipalName to handle special characters
+	encodedUPN := url.QueryEscape(userPrincipalName)
+	path := fmt.Sprintf("/v1.0/users/%s/memberOf", encodedUPN)
 
 	params := query.GraphParams{
-		Filter: "$filter=@odata.type eq 'microsoft.graph.directoryRole'",
+		Filter: "@odata.type eq 'microsoft.graph.directoryRole'",
 		Select: []string{"id", "displayName", "description"},
 	}
 
@@ -153,4 +158,80 @@ func (s *azureClient) GetUserDirectoryRoles(ctx context.Context, userPrincipalNa
 	}
 
 	return roles, nil
+}
+
+// Helper functions for role detection
+func isAdminUserHeuristic(upn string) bool {
+	if upn == "" {
+		return false
+	}
+
+	lower := strings.ToLower(upn)
+	adminPatterns := []string{
+		"admin", "administrator", "root", "sysadmin", "systemadmin",
+		"domain-admin", "domainadmin", "global-admin", "globaladmin",
+		"tenant-admin", "it-admin", "adm-", "-adm",
+	}
+
+	for _, pattern := range adminPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isServiceUserHeuristic(upn string) bool {
+	if upn == "" {
+		return false
+	}
+
+	lower := strings.ToLower(upn)
+
+	// More comprehensive service account patterns
+	servicePatterns := []string{
+		"service", "svc", "srv", "system", "daemon", "app-",
+		"application", "azure-", "microsoft", "msonline", "sync_",
+		"exchange", "sharepoint", "teams", "bot", "automation",
+		"backup", "monitoring",
+	}
+
+	for _, pattern := range servicePatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+
+	// Check for machine account suffix or GUID-like names
+	return strings.HasSuffix(lower, "$") || isGUIDLike(upn)
+}
+
+// Helper function for GUID detection
+func isGUIDLike(s string) bool {
+	// Basic GUID pattern check
+	if len(s) != 36 {
+		return false
+	}
+
+	// Check for GUID format: 8-4-4-4-12
+	parts := strings.Split(s, "-")
+	if len(parts) != 5 {
+		return false
+	}
+
+	expectedLengths := []int{8, 4, 4, 4, 12}
+	for i, part := range parts {
+		if len(part) != expectedLengths[i] {
+			return false
+		}
+		// Check if all characters are hexadecimal
+		for _, char := range part {
+			if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+				return false
+			}
+		}
+	}
+
+	return true
 }
