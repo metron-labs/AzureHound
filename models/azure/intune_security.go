@@ -177,18 +177,18 @@ type SecurityRecommendation struct {
 
 // BloodHoundIntuneData represents data formatted specifically for BloodHound ingestion
 type BloodHoundIntuneData struct {
-	Meta               BloodHoundMeta        `json:"meta"`
-	Data               BloodHoundDataWrapper `json:"data"`
-	ComputerDomains    []ComputerDomain      `json:"computerDomains"`
-	Computers          []Computer            `json:"computers"`
-	Users              []BloodHoundUser      `json:"users"`
-	Groups             []BloodHoundGroup     `json:"groups"`
-	LocalAdmins        []LocalAdmin          `json:"localAdmins"`
-	RemoteDesktopUsers []RemoteDesktopUser   `json:"remoteDesktopUsers"`
-	DcomUsers          []DcomUser            `json:"dcomUsers"`
-	PSRemoteUsers      []PSRemoteUser        `json:"psRemoteUsers"`
-	Sessions           []Session             `json:"sessions"`
-	RegistryKeys       []RegistryKey         `json:"registryKeys"`
+	Meta               BloodHoundMeta              `json:"meta"`
+	Data               BloodHoundIntuneDataWrapper `json:"data"` // Renamed to avoid conflict
+	ComputerDomains    []ComputerDomain            `json:"computerDomains"`
+	Computers          []Computer                  `json:"computers"`
+	Users              []BloodHoundUser            `json:"users"`
+	Groups             []BloodHoundGroup           `json:"groups"`
+	LocalAdmins        []LocalAdmin                `json:"localAdmins"`
+	RemoteDesktopUsers []RemoteDesktopUser         `json:"remoteDesktopUsers"`
+	DcomUsers          []DcomUser                  `json:"dcomUsers"`
+	PSRemoteUsers      []PSRemoteUser              `json:"psRemoteUsers"`
+	Sessions           []Session                   `json:"sessions"`
+	RegistryKeys       []RegistryKey               `json:"registryKeys"`
 }
 
 // BloodHoundMeta contains metadata about the collection
@@ -201,8 +201,8 @@ type BloodHoundMeta struct {
 	CollectedAt time.Time `json:"collectedAt"`
 }
 
-// BloodHoundDataWrapper wraps the data arrays for BloodHound
-type BloodHoundDataWrapper struct {
+// BloodHoundIntuneDataWrapper wraps the data arrays for BloodHound (renamed to avoid conflict)
+type BloodHoundIntuneDataWrapper struct {
 	Computers          []Computer          `json:"computers"`
 	Users              []BloodHoundUser    `json:"users"`
 	Groups             []BloodHoundGroup   `json:"groups"`

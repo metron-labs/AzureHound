@@ -10,7 +10,7 @@ import (
 
 	"github.com/bloodhoundad/azurehound/v2/client"
 	"github.com/bloodhoundad/azurehound/v2/client/query"
-	"github.com/bloodhoundad/azurehound/v2/models/azure"
+	"github.com/bloodhoundad/azurehound/v2/models/intune"
 	"github.com/spf13/cobra"
 )
 
@@ -47,10 +47,10 @@ func listIntuneDevicesCmdImpl(cmd *cobra.Command, args []string) {
 	}
 }
 
-func listIntuneDevices(ctx context.Context, azClient client.AzureClient) ([]azure.IntuneDevice, error) {
+func listIntuneDevices(ctx context.Context, azClient client.AzureClient) ([]intune.ManagedDevice, error) {
 	var (
-		out     = make([]azure.IntuneDevice, 0)
-		devices = azClient.ListIntuneDevices(ctx, query.GraphParams{})
+		out     = make([]intune.ManagedDevice, 0)
+		devices = azClient.ListIntuneManagedDevices(ctx, query.GraphParams{})
 		count   = 0
 	)
 

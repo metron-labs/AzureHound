@@ -30,14 +30,38 @@ func listIntuneRegistryAnalysisCmdImpl(cmd *cobra.Command, args []string) {
 
 	azClient := connectAndCreateClient()
 
-	// Skip script validation for now
-	fmt.Printf("Skipping script validation - proceeding with device analysis")
+	// Add flag to choose between real and simulated analysis
+	useRealAnalysis, _ := cmd.Flags().GetBool("real-analysis")
 
-	if analysisResults, err := performDeviceAnalysisWithoutScripts(ctx, azClient); err != nil {
-		exit(err)
+	var analysisResults []azure.DeviceSecurityAnalysis
+	var err error
+
+	if useRealAnalysis {
+		fmt.Printf("🔍 Performing real registry security analysis...\n")
+		// Validate script deployment first
+		if err := azClient.ValidateScriptDeployment(ctx); err != nil {
+			fmt.Printf("⚠️ Script validation failed: %v\n", err)
+			fmt.Printf("ℹ️ Falling back to device compliance analysis\n")
+			analysisResults, err = performDeviceAnalysisWithoutScripts(ctx, azClient)
+		} else {
+			analysisResults, err = performRealRegistrySecurityAnalysis(ctx, azClient)
+		}
 	} else {
-		displayAnalysisResults(analysisResults)
+		fmt.Printf("ℹ️ Performing device compliance analysis (no registry scripts)\n")
+		analysisResults, err = performDeviceAnalysisWithoutScripts(ctx, azClient)
 	}
+
+	if err != nil {
+		exit(err)
+	}
+
+	displayAnalysisResults(analysisResults)
+}
+
+// Add flag to command initialization
+func init() {
+	listRootCmd.AddCommand(listIntuneRegistryAnalysisCmd)
+	listIntuneRegistryAnalysisCmd.Flags().Bool("real-analysis", false, "Perform real registry analysis using deployed scripts")
 }
 
 // cmd/list-intune-registry-analysis.go - Add this function

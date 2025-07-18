@@ -469,5 +469,7 @@ func exportSessionData(results []azure.DeviceSessionAnalysis, outputPath string)
 		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 
-	return os.WriteFile(outputPath, jsonData, 0644)
+	// Use restrictive permissions (0600) to protect sensitive session data
+	// Only the owner can read and write the file
+	return os.WriteFile(outputPath, jsonData, 0600)
 }

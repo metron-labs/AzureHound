@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/bloodhoundad/azurehound/v2/client"
@@ -26,12 +28,12 @@ var listGroupMembershipCmd = &cobra.Command{
 }
 
 func listGroupMembershipCmdImpl(cmd *cobra.Command, args []string) {
-	ctx, stop := context.WithCancel(cmd.Context())
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	azClient := connectAndCreateClient()
 
-	fmt.Printf("🎯 Collecting focused Azure AD data for BloodHound...\n\n")
+	fmt.Printf("🔄 Collecting focused Azure AD data for BloodHound...\n\n")
 	startTime := time.Now()
 
 	// Collect only essential data
@@ -63,7 +65,7 @@ func collectAllGraphData(ctx context.Context, azClient client.AzureClient) (*azu
 	}
 
 	// Collect Group Memberships (focused on relevant groups)
-	fmt.Printf("👥 Collecting Azure AD groups and memberships...\n")
+	fmt.Printf("🏢 Collecting Azure AD groups and memberships...\n")
 	groupResults := azClient.CollectGroupMembershipData(ctx)
 	for groupResult := range groupResults {
 		if groupResult.Error != nil {
@@ -76,10 +78,10 @@ func collectAllGraphData(ctx context.Context, azClient client.AzureClient) (*azu
 			}
 		}
 	}
-	fmt.Printf("   ✅ Collected %d relevant groups\n", result.TotalGroups)
+	fmt.Printf("   ✓ Collected %d relevant groups\n", result.TotalGroups)
 
 	// Collect User Role Assignments (focused on users with roles)
-	fmt.Printf("🔑 Collecting user role assignments...\n")
+	fmt.Printf("👤 Collecting user role assignments...\n")
 	userResults := azClient.CollectUserRoleAssignments(ctx)
 	for userResult := range userResults {
 		if userResult.Error != nil {
@@ -92,10 +94,10 @@ func collectAllGraphData(ctx context.Context, azClient client.AzureClient) (*azu
 			}
 		}
 	}
-	fmt.Printf("   ✅ Collected role assignments for %d users\n", result.TotalUsers)
+	fmt.Printf("   ✓ Collected role assignments for %d users\n", result.TotalUsers)
 
 	// Skip device and sign-in collection for focused approach
-	fmt.Printf("⏭️  Skipping device and sign-in data (focused collection)\n")
+	fmt.Printf("ℹ️  Skipping device and sign-in data (focused collection)\n")
 
 	return result, nil
 }
@@ -111,7 +113,7 @@ func displayGraphDataResults(result *azure.GraphDataCollectionResult) {
 
 	// Group Analysis
 	if len(result.GroupMemberships) > 0 {
-		fmt.Printf("👥 GROUP MEMBERSHIP ANALYSIS:\n")
+		fmt.Printf("🏢 GROUP MEMBERSHIP ANALYSIS:\n")
 
 		totalMembers := 0
 		privilegedGroups := 0
@@ -134,7 +136,7 @@ func displayGraphDataResults(result *azure.GraphDataCollectionResult) {
 
 	// User Rights Analysis
 	if len(result.UserRoleAssignments) > 0 {
-		fmt.Printf("🔑 USER RIGHTS ANALYSIS:\n")
+		fmt.Printf("👤 USER RIGHTS ANALYSIS:\n")
 
 		totalAssignments := 0
 		privilegedUsers := 0
@@ -169,7 +171,7 @@ func displayGraphDataResults(result *azure.GraphDataCollectionResult) {
 }
 
 func exportGraphDataToBloodHound(result *azure.GraphDataCollectionResult) error {
-	fmt.Printf("📤 Exporting data to BloodHound format...\n")
+	fmt.Printf("📥 Exporting data to BloodHound format...\n")
 
 	bloodhoundData := convertToBloodHoundFormat(result)
 
@@ -188,7 +190,7 @@ func exportGraphDataToBloodHound(result *azure.GraphDataCollectionResult) error 
 		return fmt.Errorf("failed to write BloodHound data: %w", err)
 	}
 
-	fmt.Printf("✅ Focused BloodHound data exported to: %s\n", filename)
+	fmt.Printf("✓ Focused BloodHound data exported to: %s\n", filename)
 	fmt.Printf("   • Group Memberships: %d\n", len(bloodhoundData.GroupMemberships))
 	fmt.Printf("   • Role Assignments: %d\n", len(bloodhoundData.UserRoleAssignments))
 
@@ -298,7 +300,7 @@ func convertToBloodHoundFormat(result *azure.GraphDataCollectionResult) azure.Bl
 	return bloodhoundData
 }
 
-// Helper functions
+// Helper functions with improved privileged group detection
 func isPrivilegedGroup(groupName string) bool {
 	privilegedGroups := []string{
 		"Global Administrator",
@@ -317,12 +319,47 @@ func isPrivilegedGroup(groupName string) bool {
 		"Administrators",
 	}
 
+	normalizedGroupName := strings.ToLower(strings.TrimSpace(groupName))
+
 	for _, privileged := range privilegedGroups {
-		if strings.Contains(strings.ToLower(groupName), strings.ToLower(privileged)) {
+		normalizedPrivileged := strings.ToLower(privileged)
+
+		// Use exact match or word boundary check to avoid false positives
+		if normalizedGroupName == normalizedPrivileged {
+			return true
+		}
+
+		// Check for word boundaries to avoid matching "Non-Administrator" to "Administrator"
+		words := strings.Fields(normalizedGroupName)
+		privilegedWords := strings.Fields(normalizedPrivileged)
+
+		// If all privileged words are found as complete words in group name
+		if containsAllWords(words, privilegedWords) {
 			return true
 		}
 	}
 	return false
+}
+
+// containsAllWords checks if all words in 'privileged' exist as complete words in 'groupWords'
+func containsAllWords(groupWords, privilegedWords []string) bool {
+	if len(privilegedWords) == 0 {
+		return false
+	}
+
+	for _, privilegedWord := range privilegedWords {
+		found := false
+		for _, groupWord := range groupWords {
+			if groupWord == privilegedWord {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func hasPrivilegedRoles(assignments []azure.AppRoleAssignment) bool {

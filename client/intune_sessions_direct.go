@@ -47,7 +47,7 @@ func (s *azureClient) CollectSessionDataDirectly(ctx context.Context) <-chan Azu
 		// Collect all sign-in logs
 		for result := range signInLogsChan {
 			if result.Error != nil {
-				fmt.Printf("❌ Error collecting sign-in log: %v\n", result.Error)
+				fmt.Printf("⚠️ Error collecting sign-in log: %v\n", result.Error)
 				errorCount++
 				if errorCount > 5 { // Stop after too many errors
 					out <- AzureResult[azure.DeviceSessionData]{
@@ -75,9 +75,16 @@ func (s *azureClient) CollectSessionDataDirectly(ctx context.Context) <-chan Azu
 			return
 		}
 
-		// Process the logs into device sessions
-		deviceSessions := s.processSignInLogsSimple(signInLogs)
-		fmt.Printf("🔄 Created %d device session records\n", len(deviceSessions))
+		// Process the logs into device sessions with admin checking
+		deviceSessions, err := s.processSignInLogsWithAdminChecking(ctx, signInLogs)
+		if err != nil {
+			out <- AzureResult[azure.DeviceSessionData]{
+				Error: fmt.Errorf("failed to process sign-in logs: %w", err),
+			}
+			return
+		}
+
+		fmt.Printf("🔍 Created %d device session records\n", len(deviceSessions))
 
 		// Send results
 		for _, sessionData := range deviceSessions {
@@ -148,9 +155,73 @@ func (s *azureClient) listSignInLogs(ctx context.Context, params query.GraphPara
 	return out
 }
 
-// processSignInLogsSimple converts sign-in logs to device session data
-func (s *azureClient) processSignInLogsSimple(signInLogs []SignInEvent) []azure.DeviceSessionData {
-	fmt.Printf("🔄 Processing %d sign-in logs into device sessions\n", len(signInLogs))
+// isAdminUserByRoles checks if a user has admin roles using Graph API
+func (s *azureClient) isAdminUserByRoles(ctx context.Context, userPrincipalName string) bool {
+	// Get user's role assignments using existing method
+	// First get the user ID
+	users := s.ListAzureADUsers(ctx, query.GraphParams{
+		Filter: fmt.Sprintf("userPrincipalName eq '%s'", userPrincipalName),
+		Top:    1,
+	})
+
+	var userID string
+	for userResult := range users {
+		if userResult.Error == nil {
+			userID = userResult.Ok.Id
+			break
+		}
+	}
+
+	if userID == "" {
+		return false
+	}
+
+	// Get user's app role assignments
+	roleAssignments := s.ListUserAppRoleAssignments(ctx, userID, query.GraphParams{})
+
+	for assignmentResult := range roleAssignments {
+		if assignmentResult.Error != nil {
+			continue
+		}
+
+		assignment := assignmentResult.Ok
+		if hasPrivilegedRoles([]azure.AppRoleAssignment{assignment}) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasPrivilegedRoles checks if assignments contain privileged roles (reused from existing code)
+func hasPrivilegedRoles(assignments []azure.AppRoleAssignment) bool {
+	privilegedRoles := []string{
+		"Global Administrator",
+		"Privileged Role Administrator",
+		"Security Administrator",
+		"User Administrator",
+		"Directory.ReadWrite.All",
+		"RoleManagement.ReadWrite.Directory",
+		"Application.ReadWrite.All",
+	}
+
+	for _, assignment := range assignments {
+		assignmentName := assignment.PrincipalDisplayName
+		resourceName := assignment.ResourceDisplayName
+
+		for _, privileged := range privilegedRoles {
+			if strings.Contains(strings.ToLower(assignmentName), strings.ToLower(privileged)) ||
+				strings.Contains(strings.ToLower(resourceName), strings.ToLower(privileged)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// processSignInLogsWithAdminChecking converts sign-in logs to device session data with proper admin checking
+func (s *azureClient) processSignInLogsWithAdminChecking(ctx context.Context, signInLogs []SignInEvent) ([]azure.DeviceSessionData, error) {
+	fmt.Printf("🔍 Processing %d sign-in logs into device sessions with admin checking\n", len(signInLogs))
 
 	// Group sign-ins by device
 	deviceGroups := make(map[string][]SignInEvent)
@@ -172,16 +243,20 @@ func (s *azureClient) processSignInLogsSimple(signInLogs []SignInEvent) []azure.
 	var results []azure.DeviceSessionData
 
 	for deviceKey, sessions := range deviceGroups {
-		fmt.Printf("🔄 Processing device: %s (%d sessions)\n", deviceKey, len(sessions))
-		sessionData := s.createDeviceSessionData(deviceKey, sessions)
+		fmt.Printf("🔍 Processing device: %s (%d sessions)\n", deviceKey, len(sessions))
+		sessionData, err := s.createDeviceSessionDataWithAdminCheck(ctx, deviceKey, sessions)
+		if err != nil {
+			fmt.Printf("⚠️ Error processing device %s: %v\n", deviceKey, err)
+			continue
+		}
 		results = append(results, sessionData)
 	}
 
-	return results
+	return results, nil
 }
 
-// createDeviceSessionData creates session data for a device
-func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignInEvent) azure.DeviceSessionData {
+// createDeviceSessionDataWithAdminCheck creates session data for a device with proper admin checking
+func (s *azureClient) createDeviceSessionDataWithAdminCheck(ctx context.Context, deviceKey string, signIns []SignInEvent) (azure.DeviceSessionData, error) {
 	now := time.Now()
 
 	// Create basic device info
@@ -204,7 +279,7 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 		}
 	}
 
-	// Process sessions
+	// Process sessions with proper admin checking
 	var activeSessions []azure.ActiveSession
 	var loggedOnUsers []azure.LoggedOnUser
 	userMap := make(map[string]bool)
@@ -215,7 +290,8 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 	for i, signIn := range signIns {
 		// Only process successful sign-ins
 		if signIn.Status.ErrorCode == 0 {
-			isAdmin := isAdminUser(signIn.UserPrincipalName)
+			// Use proper admin checking instead of string matching
+			isAdmin := s.isAdminUserByRoles(ctx, signIn.UserPrincipalName)
 			if isAdmin {
 				adminCount++
 			}
@@ -297,14 +373,14 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 		},
 	}
 
-	fmt.Printf("✅ Created session data for %s: %d sessions, %d users, %d admin sessions\n",
+	fmt.Printf("✓ Created session data for %s: %d sessions, %d users, %d admin sessions\n",
 		deviceInfo.DeviceName, len(activeSessions), len(loggedOnUsers), adminCount)
 
 	return azure.DeviceSessionData{
 		Device:      deviceInfo,
 		SessionData: sessionData,
 		CollectedAt: now,
-	}
+	}, nil
 }
 
 // Helper functions
@@ -353,11 +429,6 @@ func getIdleTime(logonTime time.Time) string {
 	hours := int(duration.Hours())
 	minutes := int(duration.Minutes()) % 60
 	return fmt.Sprintf("%02d:%02d:00", hours, minutes)
-}
-
-func isAdminUser(upn string) bool {
-	lower := strings.ToLower(upn)
-	return strings.Contains(lower, "admin") || strings.Contains(lower, "root")
 }
 
 func isServiceUser(upn string) bool {

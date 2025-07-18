@@ -1,4 +1,4 @@
-// client/intune_data_collection.go
+// client/intune_groups_direct.go
 package client
 
 import (
