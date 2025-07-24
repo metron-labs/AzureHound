@@ -14,7 +14,7 @@
       "metadata": {
         "description": "Azure tenant ID to analyze"
       },
-      "minLength": 36, // GUIDs are 36 characters long (32 hex digits + 4 hyphens)
+      "minLength": 36,
       "maxLength": 36
     },
     "azureSecret": {
@@ -68,14 +68,20 @@
   },
   "variables": {
     "acrLoginServer": "azurehoundregistry.azurecr.io",
-    "acrImageName": "[format('{0}/ishika-azurehound-v1:latest', variables('acrLoginServer'))]",
+    "acrImageName": "[format('{0}/azurehound:latest', variables('acrLoginServer'))]",
     "configcontent": "[concat('{\\\"batchsize\\\": 100,\\\"config\\\": \\\"/mnt/config/config.json\\\",\\\"instance\\\": \\\"https://', parameters('bloodhoundInstanceDomain'), '\\\",\\\"json\\\": false,\\\"managed-identity\\\": false,\\\"maxconnsperhost\\\": 20,\\\"maxidleconnsperhost\\\": 20,\\\"region\\\": \\\"cloud\\\",\\\"streamcount\\\": 25,\\\"tenant\\\": \\\"', parameters('azureTenantId'),'\\\",\\\"token\\\": \\\"', parameters('bloodhoundToken'),'\\\",\\\"tokenid\\\": \\\"', parameters('bloodhoundTokenId'),'\\\",\\\"secret\\\": \\\"', parameters('azureSecret'),'\\\",\\\"app\\\": \\\"', parameters('azureAppID'),'\\\",\\\"verbosity\\\": 2}')]",
     "fileShareVolumeName": "config-volume",
     "containerAppName": "[format('app-{0}', uniqueString(resourceGroup().id))]",
     "containerAppEnvName": "[format('env-{0}', uniqueString(resourceGroup().id))]",
     "containerAppLogAnalyticsName": "[format('containerapp-log-{0}', uniqueString(resourceGroup().id))]",
     "location": "[resourceGroup().location]",
-    "containerUMIName": "[format('id-app-{0}', uniqueString(resourceGroup().id))]"
+    "containerUMIName": "[format('id-app-{0}', uniqueString(resourceGroup().id))]",
+    "functionAppName": "[format('fun-app-{0}', uniqueString(resourceGroup().id))]",
+    "hostingPlanName": "[format('hosting-plan-{0}', uniqueString(resourceGroup().id))]",
+    "applicationInsightsName": "[variables('functionAppName')]",
+    "storageAccountName": "[format('sa{0}', uniqueString(resourceGroup().id))]",
+    "functionPackageUri": "https://saazurehounddev.blob.core.windows.net/azurefunction/azurefunction.zip?sp=r&st=2025-07-24T07:57:27Z&se=2030-12-30T18:30:00Z&spr=https&sv=2024-11-04&sr=b&sig=f6EYF8ePXpCn%2Bua0jJ9GxCWdVx39tMSUTMR18qEJ%2FvM%3D",
+    "runtime": "python"
   },
   "resources": [
     {
@@ -382,6 +388,108 @@
             }
           }
         }
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2022-09-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[variables('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-03-01",
+      "name": "[variables('hostingPlanName')]",
+      "location": "[variables('location')]",
+      "sku": {
+        "name": "Y1",
+        "tier": "Dynamic"
+      },
+      "kind": "linux",
+      "properties": {
+        "reserved": true  
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('applicationInsightsName')]",
+      "location": "[variables('location')]",
+      "tags": {
+        "[format('hidden-link:{0}', resourceId('Microsoft.Web/sites', variables('functionAppName')))]": "Resource"
+      },
+      "properties": {
+        "Application_Type": "web"
+      },
+      "kind": "web"
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2024-04-01",
+      "name": "[variables('functionAppName')]",
+      "location": "[variables('location')]",
+      "kind": "functionapp,linux",
+      "identity": {
+        "type": "SystemAssigned" 
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', variables('applicationInsightsName'))]",
+        "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+        "reserved": true,
+        "siteConfig": {
+          "appSettings": [
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('functionAppName')), '2020-02-02').InstrumentationKey]"
+            },
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2022-09-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
+            },
+            {
+              "name": "FUNCTIONS_EXTENSION_VERSION",
+              "value": "~4"
+            },
+            {
+              "name": "WEBSITE_RUN_FROM_PACKAGE",
+              "value": "[variables('functionPackageUri')]"
+            },
+            {
+              "name": "FUNCTIONS_WORKER_RUNTIME",
+              "value": "[variables('runtime')]"
+            },
+            {
+              "name": "SUBSCRIPTION_ID",
+              "value": "[subscription().subscriptionId]"
+            },
+            {
+              "name": "RESOURCE_GROUP_NAME",
+              "value": "[resourceGroup().name]"
+            },
+            {
+              "name": "CONTAINER_APP_NAME",
+              "value": "[variables('containerAppName')]"
+            }
+          ],
+          "cors": {
+            "allowedOrigins": [
+              "https://portal.azure.com"
+            ]
+          },
+          "linuxFxVersion": "Python|3.10",
+          "ftpsState":"Disabled",
+          "minTlsVersion":"1.2"
+        },
+        "httpsOnly":true 
       }
     }
   ],
