@@ -5,57 +5,84 @@ import (
 	"time"
 )
 
+// ChromeOSDeviceInfo represents Chrome OS specific device information
+type ChromeOSDeviceInfo struct {
+	AnnotatedAssetId     string    `json:"annotatedAssetId"`
+	AnnotatedLocation    string    `json:"annotatedLocation"`
+	AnnotatedUser        string    `json:"annotatedUser"`
+	BootMode             string    `json:"bootMode"`
+	DeviceId             string    `json:"deviceId"`
+	FirmwareVersion      string    `json:"firmwareVersion"`
+	KernelVersion        string    `json:"kernelVersion"`
+	LastEnrollmentTime   time.Time `json:"lastEnrollmentTime"`
+	LastKnownNetwork     string    `json:"lastKnownNetwork"`
+	LastSync             time.Time `json:"lastSync"`
+	MacAddress           string    `json:"macAddress"`
+	Meid                 string    `json:"meid"`
+	Model                string    `json:"model"`
+	OSVersion            string    `json:"osVersion"`
+	PlatformVersion      string    `json:"platformVersion"`
+	RecentUsers          []string  `json:"recentUsers"`
+	SerialNumber         string    `json:"serialNumber"`
+	Status               string    `json:"status"`
+	SupportEndDate       time.Time `json:"supportEndDate"`
+	SystemRamFreeReports []string  `json:"systemRamFreeReports"`
+	SystemRamTotal       int64     `json:"systemRamTotal"`
+	TpmVersionInfo       string    `json:"tpmVersionInfo"`
+	WillAutoRenew        bool      `json:"willAutoRenew"`
+}
+
 // IntuneDevice represents a device managed by Microsoft Intune
 type IntuneDevice struct {
-	ID                                      string        `json:"id"`
-	DeviceName                              string        `json:"deviceName"`
-	OperatingSystem                         string        `json:"operatingSystem"`
-	OSVersion                               string        `json:"osVersion"`
-	ComplianceState                         string        `json:"complianceState"`
-	LastSyncDateTime                        time.Time     `json:"lastSyncDateTime"`
-	EnrollmentType                          string        `json:"enrollmentType"`
-	ManagementAgent                         string        `json:"managementAgent"`
-	AzureADDeviceID                         string        `json:"azureADDeviceId"`
-	UserPrincipalName                       string        `json:"userPrincipalName"`
-	SerialNumber                            string        `json:"serialNumber"`
-	Manufacturer                            string        `json:"manufacturer"`
-	Model                                   string        `json:"model"`
-	TotalStorageSpaceInBytes                int64         `json:"totalStorageSpaceInBytes"`
-	FreeStorageSpaceInBytes                 int64         `json:"freeStorageSpaceInBytes"`
-	ManagedDeviceName                       string        `json:"managedDeviceName"`
-	PartnerReportedThreatState              string        `json:"partnerReportedThreatState"`
-	RequireUserEnrollmentApproval           bool          `json:"requireUserEnrollmentApproval"`
-	ManagementCertificateExpirationDate     time.Time     `json:"managementCertificateExpirationDate"`
-	ICCID                                   string        `json:"iccid"`
-	UDID                                    string        `json:"udid"`
-	Notes                                   string        `json:"notes"`
-	EthernetMacAddress                      string        `json:"ethernetMacAddress"`
-	WiFiMacAddress                          string        `json:"wiFiMacAddress"`
-	PhysicalMemoryInBytes                   int64         `json:"physicalMemoryInBytes"`
-	ProcessorArchitecture                   string        `json:"processorArchitecture"`
-	SpecificationVersion                    string        `json:"specificationVersion"`
-	JoinType                                string        `json:"joinType"`
-	SkuFamily                               string        `json:"skuFamily"`
-	SkuNumber                               int           `json:"skuNumber"`
-	ManagementFeatures                      string        `json:"managementFeatures"`
-	ChromeOSDeviceInfo                      []interface{} `json:"chromeOSDeviceInfo"`
-	EnrolledDateTime                        time.Time     `json:"enrolledDateTime"`
-	EmailAddress                            string        `json:"emailAddress"`
-	UserID                                  string        `json:"userId"`
-	UserDisplayName                         string        `json:"userDisplayName"`
-	DeviceRegistrationState                 string        `json:"deviceRegistrationState"`
-	DeviceCategoryDisplayName               string        `json:"deviceCategoryDisplayName"`
-	IsSupervised                            bool          `json:"isSupervised"`
-	ExchangeLastSuccessfulSyncDateTime      time.Time     `json:"exchangeLastSuccessfulSyncDateTime"`
-	ExchangeAccessState                     string        `json:"exchangeAccessState"`
-	ExchangeAccessStateReason               string        `json:"exchangeAccessStateReason"`
-	RemoteAssistanceSessionURL              string        `json:"remoteAssistanceSessionUrl"`
-	RemoteAssistanceSessionErrorDetails     string        `json:"remoteAssistanceSessionErrorDetails"`
-	IsEncrypted                             bool          `json:"isEncrypted"`
-	ComplianceGracePeriodExpirationDateTime time.Time     `json:"complianceGracePeriodExpirationDateTime"`
-	ManagementAgents                        []string      `json:"managementAgents"`
-	LostModeState                           string        `json:"lostModeState"`
-	ActivationLockBypassCode                string        `json:"activationLockBypassCode"`
+	ID                                      string               `json:"id"`
+	DeviceName                              string               `json:"deviceName"`
+	OperatingSystem                         string               `json:"operatingSystem"`
+	OSVersion                               string               `json:"osVersion"`
+	ComplianceState                         string               `json:"complianceState"`
+	LastSyncDateTime                        time.Time            `json:"lastSyncDateTime"`
+	EnrollmentType                          string               `json:"enrollmentType"`
+	ManagementAgent                         string               `json:"managementAgent"`
+	AzureADDeviceID                         string               `json:"azureADDeviceId"`
+	UserPrincipalName                       string               `json:"userPrincipalName"`
+	SerialNumber                            string               `json:"serialNumber"`
+	Manufacturer                            string               `json:"manufacturer"`
+	Model                                   string               `json:"model"`
+	TotalStorageSpaceInBytes                int64                `json:"totalStorageSpaceInBytes"`
+	FreeStorageSpaceInBytes                 int64                `json:"freeStorageSpaceInBytes"`
+	ManagedDeviceName                       string               `json:"managedDeviceName"`
+	PartnerReportedThreatState              string               `json:"partnerReportedThreatState"`
+	RequireUserEnrollmentApproval           bool                 `json:"requireUserEnrollmentApproval"`
+	ManagementCertificateExpirationDate     time.Time            `json:"managementCertificateExpirationDate"`
+	ICCID                                   string               `json:"iccid"`
+	UDID                                    string               `json:"udid"`
+	Notes                                   string               `json:"notes"`
+	EthernetMacAddress                      string               `json:"ethernetMacAddress"`
+	WiFiMacAddress                          string               `json:"wiFiMacAddress"`
+	PhysicalMemoryInBytes                   int64                `json:"physicalMemoryInBytes"`
+	ProcessorArchitecture                   string               `json:"processorArchitecture"`
+	SpecificationVersion                    string               `json:"specificationVersion"`
+	JoinType                                string               `json:"joinType"`
+	SkuFamily                               string               `json:"skuFamily"`
+	SkuNumber                               int                  `json:"skuNumber"`
+	ManagementFeatures                      string               `json:"managementFeatures"`
+	ChromeOSDeviceInfo                      []ChromeOSDeviceInfo `json:"chromeOSDeviceInfo"`
+	EnrolledDateTime                        time.Time            `json:"enrolledDateTime"`
+	EmailAddress                            string               `json:"emailAddress"`
+	UserID                                  string               `json:"userId"`
+	UserDisplayName                         string               `json:"userDisplayName"`
+	DeviceRegistrationState                 string               `json:"deviceRegistrationState"`
+	DeviceCategoryDisplayName               string               `json:"deviceCategoryDisplayName"`
+	IsSupervised                            bool                 `json:"isSupervised"`
+	ExchangeLastSuccessfulSyncDateTime      time.Time            `json:"exchangeLastSuccessfulSyncDateTime"`
+	ExchangeAccessState                     string               `json:"exchangeAccessState"`
+	ExchangeAccessStateReason               string               `json:"exchangeAccessStateReason"`
+	RemoteAssistanceSessionURL              string               `json:"remoteAssistanceSessionUrl"`
+	RemoteAssistanceSessionErrorDetails     string               `json:"remoteAssistanceSessionErrorDetails"`
+	IsEncrypted                             bool                 `json:"isEncrypted"`
+	ComplianceGracePeriodExpirationDateTime time.Time            `json:"complianceGracePeriodExpirationDateTime"`
+	ManagementAgents                        []string             `json:"managementAgents"`
+	LostModeState                           string               `json:"lostModeState"`
+	ActivationLockBypassCode                string               `json:"activationLockBypassCode"`
 }
 
 // ScriptExecution represents the execution of a PowerShell script on an Intune device
@@ -225,10 +252,11 @@ type EscalationVector struct {
 }
 
 // IntuneAppRegistration represents the Azure app registration for Intune access
+// WARNING: This struct contains sensitive credentials. Consider using secure credential storage.
 type IntuneAppRegistration struct {
 	ClientID     string   `json:"clientId"`
 	TenantID     string   `json:"tenantId"`
-	ClientSecret string   `json:"clientSecret"`
+	ClientSecret string   `json:"-"` // Excluded from JSON serialization for security
 	Permissions  []string `json:"permissions"`
 }
 
