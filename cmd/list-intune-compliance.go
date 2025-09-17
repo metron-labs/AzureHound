@@ -34,7 +34,7 @@ func createBasicComplianceState(device intune.ManagedDevice, suffix string) intu
 func init() {
 	listRootCmd.AddCommand(listIntuneComplianceCmd)
 
-	listIntuneComplianceCmd.Flags().StringP("state", "s", "", "Filter by compliance state: compliant, noncompliant, conflict, error, unknown")
+	listIntuneComplianceCmd.Flags().StringP("state", "S", "", "Filter by compliance state: compliant, noncompliant, conflict, error, unknown")
 	listIntuneComplianceCmd.Flags().BoolP("details", "d", false, "Include detailed compliance settings")
 }
 
