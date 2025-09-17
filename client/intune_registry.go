@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -12,13 +13,27 @@ import (
 	"github.com/bloodhoundad/azurehound/v2/models/azure"
 )
 
-// Configuration for your existing deployed script
-const (
-	// Update this with your actual script ID from Intune
-	DeployedRegistryScriptID = "BHE_Script_Registry_Data_Collection"
-	// Script name as it appears in Intune
-	DeployedRegistryScriptName = "BHE_Script_Registry_Data_Collection.ps1"
+// Configuration for registry script - loaded from environment variables
+var (
+	// Default values if environment variables are not set
+	defaultScriptID   = "BHE_Script_Registry_Data_Collection"
+	defaultScriptName = "BHE_Script_Registry_Data_Collection.ps1"
 )
+
+// getScriptConfiguration loads script configuration from environment variables
+func getScriptConfiguration() (string, string) {
+	scriptID := os.Getenv("INTUNE_REGISTRY_SCRIPT_ID")
+	if scriptID == "" {
+		scriptID = defaultScriptID
+	}
+
+	scriptName := os.Getenv("INTUNE_REGISTRY_SCRIPT_NAME")
+	if scriptName == "" {
+		scriptName = defaultScriptName
+	}
+
+	return scriptID, scriptName
+}
 
 func (s *azureClient) ListIntuneDevices(ctx context.Context, params query.GraphParams) <-chan AzureResult[azure.IntuneDevice] {
 	var (
@@ -27,7 +42,7 @@ func (s *azureClient) ListIntuneDevices(ctx context.Context, params query.GraphP
 	)
 
 	if params.Top == 0 {
-		params.Top = 999
+		params.Top = MaxGraphAPIPageSize
 	}
 
 	go getAzureObjectList[azure.IntuneDevice](s.msgraph, ctx, path, params, out)
@@ -36,8 +51,11 @@ func (s *azureClient) ListIntuneDevices(ctx context.Context, params query.GraphP
 
 // ExecuteRegistryCollectionScript executes your existing deployed PowerShell script on an Intune device
 func (s *azureClient) ExecuteRegistryCollectionScript(ctx context.Context, deviceID string) (*azure.ScriptExecution, error) {
+	// Get script configuration from environment variables
+	_, scriptName := getScriptConfiguration()
+
 	// First, get the deployed script ID
-	scriptID, err := s.GetDeployedScriptID(ctx, DeployedRegistryScriptName)
+	scriptID, err := s.GetDeployedScriptID(ctx, scriptName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find deployed script: %w", err)
 	}
@@ -53,7 +71,7 @@ func (s *azureClient) ExecuteRegistryCollectionScript(ctx context.Context, devic
 		DeviceID:      deviceID,
 		Status:        "pending",
 		StartDateTime: time.Now(),
-		ScriptName:    DeployedRegistryScriptName,
+		ScriptName:    scriptName,
 		RunAsAccount:  "system",
 	}
 
@@ -206,7 +224,9 @@ func (s *azureClient) GetScriptExecutionHistory(ctx context.Context, scriptID st
 
 // ValidateScriptDeployment checks if the script is properly deployed and accessible
 func (s *azureClient) ValidateScriptDeployment(ctx context.Context) error {
-	scriptID, err := s.GetDeployedScriptID(ctx, DeployedRegistryScriptName)
+	_, scriptName := getScriptConfiguration()
+
+	scriptID, err := s.GetDeployedScriptID(ctx, scriptName)
 	if err != nil {
 		return fmt.Errorf("script validation failed: %w", err)
 	}
@@ -249,9 +269,13 @@ func (s *azureClient) WaitForScriptCompletion(ctx context.Context, scriptID stri
 				case "success":
 					if result.Ok.RemediationScriptOutput != "" {
 						var registryData azure.RegistryData
-						if err := json.Unmarshal([]byte(result.Ok.RemediationScriptOutput), &registryData); err == nil {
-							return &registryData, nil
+						if err := json.Unmarshal([]byte(result.Ok.RemediationScriptOutput), &registryData); err != nil {
+							// Log the unmarshal error and continue waiting
+							fmt.Printf("Warning: Failed to unmarshal script output: %v\n", err)
+							fmt.Printf("Script output was: %s\n", result.Ok.RemediationScriptOutput)
+							continue
 						}
+						return &registryData, nil
 					}
 					// If no output yet, continue waiting
 
