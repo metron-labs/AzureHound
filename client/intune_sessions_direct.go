@@ -27,7 +27,7 @@ func (s *azureClient) CollectSessionDataDirectly(ctx context.Context) <-chan Azu
 	go func() {
 		defer close(out)
 
-		fmt.Printf("🔍 Starting session data collection from Graph API...\n")
+		// fmt.Printf("🔍 Starting session data collection from Graph API...\n")
 
 		// Get sign-in logs using the correct AzureHound pattern
 		params := query.GraphParams{
@@ -48,7 +48,7 @@ func (s *azureClient) CollectSessionDataDirectly(ctx context.Context) <-chan Azu
 		// Collect all sign-in logs
 		for result := range signInLogsChan {
 			if result.Error != nil {
-				fmt.Printf("❌ Error collecting sign-in log: %v\n", result.Error)
+				// fmt.Printf("❌ Error collecting sign-in log: %v\n", result.Error)
 				errorCount++
 				if errorCount > 5 { // Stop after too many errors
 					out <- AzureResult[azure.DeviceSessionData]{
@@ -61,7 +61,7 @@ func (s *azureClient) CollectSessionDataDirectly(ctx context.Context) <-chan Azu
 			signInLogs = append(signInLogs, result.Ok)
 		}
 
-		fmt.Printf("📊 Retrieved %d sign-in events (%d errors)\n", len(signInLogs), errorCount)
+		// fmt.Printf("📊 Retrieved %d sign-in events (%d errors)\n", len(signInLogs), errorCount)
 
 		if len(signInLogs) == 0 {
 			fmt.Printf("⚠️  No sign-in logs found. This could mean:\n")
@@ -78,7 +78,7 @@ func (s *azureClient) CollectSessionDataDirectly(ctx context.Context) <-chan Azu
 
 		// Process the logs into device sessions
 		deviceSessions := s.processSignInLogsSimple(signInLogs)
-		fmt.Printf("🔄 Created %d device session records\n", len(deviceSessions))
+		// fmt.Printf("🔄 Created %d device session records\n", len(deviceSessions))
 
 		// Send results
 		for _, sessionData := range deviceSessions {
@@ -151,7 +151,7 @@ func (s *azureClient) listSignInLogs(ctx context.Context, params query.GraphPara
 
 // processSignInLogsSimple converts sign-in logs to device session data
 func (s *azureClient) processSignInLogsSimple(signInLogs []SignInEvent) []azure.DeviceSessionData {
-	fmt.Printf("🔄 Processing %d sign-in logs into device sessions\n", len(signInLogs))
+	// fmt.Printf("🔄 Processing %d sign-in logs into device sessions\n", len(signInLogs))
 
 	// Group sign-ins by device
 	deviceGroups := make(map[string][]SignInEvent)
@@ -168,12 +168,12 @@ func (s *azureClient) processSignInLogsSimple(signInLogs []SignInEvent) []azure.
 		deviceGroups[deviceKey] = append(deviceGroups[deviceKey], signIn)
 	}
 
-	fmt.Printf("📊 Grouped sign-ins into %d devices\n", len(deviceGroups))
+	// fmt.Printf("📊 Grouped sign-ins into %d devices\n", len(deviceGroups))
 
 	var results []azure.DeviceSessionData
 
 	for deviceKey, sessions := range deviceGroups {
-		fmt.Printf("🔄 Processing device: %s (%d sessions)\n", deviceKey, len(sessions))
+		// fmt.Printf("🔄 Processing device: %s (%d sessions)\n", deviceKey, len(sessions))
 		// FIXED: Call the correct function name
 		sessionData := s.createDeviceSessionData(deviceKey, sessions)
 		results = append(results, sessionData)
@@ -308,8 +308,8 @@ func (s *azureClient) createDeviceSessionData(deviceKey string, signIns []SignIn
 		},
 	}
 
-	fmt.Printf("✅ Created session data for %s: %d sessions, %d users, %d admin sessions, %d service accounts\n",
-		deviceInfo.DeviceName, len(activeSessions), len(loggedOnUsers), adminCount, serviceCount)
+	// fmt.Printf("✅ Created session data for %s: %d sessions, %d users, %d admin sessions, %d service accounts\n",
+	// 	deviceInfo.DeviceName, len(activeSessions), len(loggedOnUsers), adminCount, serviceCount)
 
 	return azure.DeviceSessionData{
 		Device:      deviceInfo,

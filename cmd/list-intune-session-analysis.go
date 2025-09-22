@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
 	"github.com/bloodhoundad/azurehound/v2/client"
+	"github.com/bloodhoundad/azurehound/v2/enums"
 	"github.com/bloodhoundad/azurehound/v2/models/azure"
+	"github.com/bloodhoundad/azurehound/v2/panicrecovery"
 	"github.com/spf13/cobra"
 )
 
@@ -36,79 +39,88 @@ var listIntuneSessionAnalysisCmd = &cobra.Command{
 }
 
 func listIntuneSessionAnalysisCmdImpl(cmd *cobra.Command, args []string) {
-	ctx, stop := context.WithCancel(cmd.Context())
-	defer stop()
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, os.Kill)
+	defer gracefulShutdown(stop)
 
-	// Connect to Azure
+	log.V(1).Info("testing connections")
 	azClient := connectAndCreateClient()
+	start := time.Now()
 
-	// Get command line options
-	verbose, _ := cmd.Flags().GetBool("verbose")
-	adminOnly, _ := cmd.Flags().GetBool("admin-only")
-	exportBloodhound, _ := cmd.Flags().GetString("export-bloodhound")
+	stream := intuneSessionAnalysisCmd(ctx, azClient)
+	panicrecovery.HandleBubbledPanic(ctx, stop, log)
+	outputStream(ctx, stream)
 
-	if verbose {
-		fmt.Printf("🔍 Starting session analysis using Microsoft Graph Sign-In Logs API\n")
-		fmt.Printf("🎯 Admin sessions only: %v\n", adminOnly)
-	}
-
-	// Perform session analysis
-	analysisResults, err := performSessionAnalysis(ctx, azClient, adminOnly, verbose)
-	if err != nil {
-		fmt.Printf("❌ Session analysis failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Display results
-	displaySimpleSessionResults(analysisResults, exportBloodhound, verbose)
+	duration := time.Since(start)
+	log.Info("collection completed", "duration", duration.String())
 }
 
-func performSessionAnalysis(ctx context.Context, azClient client.AzureClient, adminOnly bool, verbose bool) ([]azure.DeviceSessionAnalysis, error) {
-	if verbose {
-		fmt.Printf("🚀 Collecting session data from Microsoft Graph Sign-In Logs API...\n")
-	}
+func intuneSessionAnalysisCmd(ctx context.Context, client client.AzureClient) <-chan interface{} {
 
-	// Use the CollectSessionDataDirectly method
-	sessionDataChannel := azClient.CollectSessionDataDirectly(ctx)
+	var (
+		out = make(chan interface{})
+	)
 
-	var results []azure.DeviceSessionAnalysis
-	successCount := 0
-	errorCount := 0
+	go func() {
+		defer panicrecovery.PanicRecovery()
+		defer close(out)
 
-	// Process session data
-	for sessionResult := range sessionDataChannel {
-		if sessionResult.Error != nil {
-			if verbose {
-				fmt.Printf("⚠️  Session collection error: %v\n", sessionResult.Error)
+		analysis := performSessionAnalysis(ctx, client)
+
+		for result := range analysis {
+			select {
+			case out <- NewAzureWrapper(enums.KindAZIntuneSessionAnalysis, result):
+			case <-ctx.Done():
+				return
 			}
-			errorCount++
-			continue
+		}
+	}()
+
+	return out
+}
+
+func performSessionAnalysis(ctx context.Context, azClient client.AzureClient) <-chan azure.DeviceSessionAnalysis {
+	out := make(chan azure.DeviceSessionAnalysis)
+
+	go func() {
+		defer panicrecovery.PanicRecovery()
+		defer close(out)
+
+		// Use the CollectSessionDataDirectly method
+		sessionDataChannel := azClient.CollectSessionDataDirectly(ctx)
+
+		successCount := 0
+		errorCount := 0
+
+		for sessionResult := range sessionDataChannel {
+			if sessionResult.Error != nil {
+				log.V(2).Info("session collection error", "error", sessionResult.Error)
+				errorCount++
+				continue
+			}
+
+			analysis := createSimpleAnalysis(sessionResult.Ok)
+
+			successCount++
+			select {
+			case out <- analysis:
+			case <-ctx.Done():
+				return
+			}
+
+			if successCount%5 == 0 {
+				log.V(2).Info("progress update", "analyzed", successCount, "errors", errorCount)
+			}
 		}
 
-		// Filter for admin sessions if requested
-		if adminOnly && !hasAdminSessions(sessionResult.Ok.SessionData) {
-			continue
+		log.V(2).Info("analysis completed", "successCount", successCount, "errorCount", errorCount)
+
+		if successCount == 0 {
+			log.Error(fmt.Errorf("no devices successfully analyzed"), "check Graph API permissions and sign-in log availability")
 		}
+		log.Info("finished collecting intune devices session analysis", "count", successCount)
+	}()
 
-		// Create simple analysis
-		analysis := createSimpleAnalysis(sessionResult.Ok)
-		results = append(results, analysis)
-		successCount++
-
-		if verbose && successCount%5 == 0 {
-			fmt.Printf("✅ Analyzed %d devices, %d errors so far\n", successCount, errorCount)
-		}
-	}
-
-	if verbose {
-		fmt.Printf("📊 Analysis completed: %d successful, %d errors\n", successCount, errorCount)
-	}
-
-	if successCount == 0 {
-		return nil, fmt.Errorf("no devices were successfully analyzed - check Graph API permissions and sign-in log availability")
-	}
-
-	return results, nil
+	return out
 }
 
 func createSimpleAnalysis(deviceData azure.DeviceSessionData) azure.DeviceSessionAnalysis {

@@ -117,12 +117,28 @@ func listAllAD(ctx context.Context, client client.AzureClient) <-chan interface{
 	// Enumerate Role Management Policy Assignments
 	unifiedRoleManagementPolicyAssignments := listRoleAssignmentPolicies(ctx, client)
 
+	// Intune Devices
+	intuneDevices := listIntuneDevices(ctx, client)
+
+	// Intune Compliance
+	intuneCompliance := listIntuneCompliance(ctx, client)
+
+	// Intune Registry Analysis
+	intuneRegistryAnalysis := intuneRegistryAnalysisCmd(ctx, client)
+
+	//Intune Session Analysis
+	intuneSessionAnalysis := intuneSessionAnalysisCmd(ctx, client)
+
 	return pipeline.Mux(ctx.Done(),
 		appOwners,
 		appRoleAssignments,
 		apps,
 		deviceOwners,
 		devices,
+		intuneDevices,
+		intuneCompliance,
+		intuneRegistryAnalysis,
+		intuneSessionAnalysis,
 		groupMembers,
 		groupOwners,
 		groups,

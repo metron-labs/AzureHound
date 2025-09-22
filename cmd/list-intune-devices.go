@@ -6,13 +6,14 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/bloodhoundad/azurehound/v2/client"
 	"github.com/bloodhoundad/azurehound/v2/client/query"
-	"github.com/bloodhoundad/azurehound/v2/models/azure"
+	"github.com/bloodhoundad/azurehound/v2/enums"
+	"github.com/bloodhoundad/azurehound/v2/panicrecovery"
 	"github.com/spf13/cobra"
 )
 
@@ -31,58 +32,45 @@ func listIntuneDevicesCmdImpl(cmd *cobra.Command, args []string) {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, os.Kill)
 	defer gracefulShutdown(stop)
 
-	// Add proper error handling for client creation
-	azClient, err := connectAndCreateClientWithError()
-	if err != nil {
-		log.Error(err, "failed to create Azure client")
-		os.Exit(1)
-	}
-
-	if devices, err := listIntuneDevices(ctx, azClient); err != nil {
-		exit(err)
-	} else {
-		// Simple output - just print device count for now
-		fmt.Printf("Found %d Intune devices\n", len(devices))
-
-		// Print basic device info
-		for _, device := range devices {
-			fmt.Printf("Device: %s (%s) - %s\n",
-				device.DeviceName,
-				device.OperatingSystem,
-				device.ComplianceState)
-		}
-	}
+	log.V(1).Info("testing connections")
+	azClient := connectAndCreateClient()
+	log.Info("collecting intune managed devices...")
+	start := time.Now()
+	stream := listIntuneDevices(ctx, azClient)
+	panicrecovery.HandleBubbledPanic(ctx, stop, log)
+	outputStream(ctx, stream)
+	duration := time.Since(start)
+	log.Info("collection completed", "duration", duration.String())
 }
 
-func listIntuneDevices(ctx context.Context, azClient client.AzureClient) ([]azure.IntuneDevice, error) {
+func listIntuneDevices(ctx context.Context, client client.AzureClient) <-chan interface{} {
 	var (
-		out     = make([]azure.IntuneDevice, 0)
-		devices = azClient.ListIntuneDevices(ctx, query.GraphParams{})
+		out    = make(chan interface{})
+		params = query.GraphParams{
+			Filter: "operatingSystem eq 'Windows'", // Focus on Windows devices for BloodHound
+		}
 	)
 
-	for result := range devices {
-		if result.Error != nil {
-			return nil, result.Error
-		} else {
-			out = append(out, result.Ok)
-		}
-	}
+	go func() {
+		defer panicrecovery.PanicRecovery()
+		defer close(out)
 
-	return out, nil
-}
-
-// Helper function to create client with proper error handling
-// Helper function to create client with proper error handling
-func connectAndCreateClientWithError() (azClient client.AzureClient, err error) {
-	// Use named return parameters to allow deferred function to modify them
-	defer func() {
-		if r := recover(); r != nil {
-			// Convert panic to error instead of re-panicking
-			err = fmt.Errorf("failed to create client: %v", r)
-			azClient = nil
+		count := 0
+		for item := range client.ListIntuneManagedDevices(ctx, params) {
+			if item.Error != nil {
+				log.Error(item.Error, "unable to continue processing intune devices")
+			} else {
+				log.V(2).Info("found intune device", "device", item.Ok)
+				count++
+				select {
+				case out <- NewAzureWrapper(enums.KindAZIntuneDevice, item.Ok):
+				case <-ctx.Done():
+					return
+				}
+			}
 		}
+		log.Info("finished listing intune devices", "count", count)
 	}()
 
-	azClient = connectAndCreateClient()
-	return azClient, nil
+	return out
 }

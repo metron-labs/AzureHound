@@ -4,12 +4,16 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
 	"time"
 
 	"github.com/bloodhoundad/azurehound/v2/client"
 	"github.com/bloodhoundad/azurehound/v2/client/query"
+	"github.com/bloodhoundad/azurehound/v2/enums"
 	"github.com/bloodhoundad/azurehound/v2/models/azure"
+	"github.com/bloodhoundad/azurehound/v2/panicrecovery"
 	"github.com/spf13/cobra"
 )
 
@@ -25,19 +29,44 @@ var listIntuneRegistryAnalysisCmd = &cobra.Command{
 }
 
 func listIntuneRegistryAnalysisCmdImpl(cmd *cobra.Command, args []string) {
-	ctx, stop := context.WithCancel(cmd.Context())
-	defer stop()
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, os.Kill)
+	defer gracefulShutdown(stop)
 
+	log.V(1).Info("testing connections")
 	azClient := connectAndCreateClient()
-
+	start := time.Now()
 	// Skip script validation for now
-	fmt.Printf("Skipping script validation - proceeding with device analysis")
+	log.Info("Skipping script validation - proceeding with device analysis")
 
-	if analysisResults, err := performDeviceAnalysisWithoutScripts(ctx, azClient); err != nil {
-		exit(err)
-	} else {
-		displayAnalysisResults(analysisResults)
-	}
+	stream := intuneRegistryAnalysisCmd(ctx, azClient)
+	panicrecovery.HandleBubbledPanic(ctx, stop, log)
+	outputStream(ctx, stream)
+	duration := time.Since(start)
+	log.Info("collection completed", "duration", duration.String())
+}
+
+func intuneRegistryAnalysisCmd(ctx context.Context, client client.AzureClient) <-chan interface{} {
+
+	var (
+		out = make(chan interface{})
+	)
+
+	go func() {
+		defer panicrecovery.PanicRecovery()
+		defer close(out)
+
+		analysis := performDeviceAnalysisWithoutScripts(ctx, client)
+
+		for result := range analysis {
+			select {
+			case out <- NewAzureWrapper(enums.KindAZIntuneRegistryAnalysis, result):
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return out
 }
 
 // cmd/list-intune-registry-analysis.go - Add this function
@@ -357,34 +386,41 @@ func countDevicesByRiskLevel(results []azure.DeviceSecurityAnalysis, minRisk, ma
 	return count
 }
 
-func performDeviceAnalysisWithoutScripts(ctx context.Context, azClient client.AzureClient) ([]azure.DeviceSecurityAnalysis, error) {
-	fmt.Printf("Starting device analysis without script execution...")
+func performDeviceAnalysisWithoutScripts(ctx context.Context, azClient client.AzureClient) <-chan azure.DeviceSecurityAnalysis {
 
-	var results []azure.DeviceSecurityAnalysis
+	out := make(chan azure.DeviceSecurityAnalysis)
+	go func() {
+		defer panicrecovery.PanicRecovery()
+		defer close(out)
+		// Just analyze devices based on Intune compliance data
+		devices := azClient.ListIntuneDevices(ctx, query.GraphParams{})
+		count := 0
+		for deviceResult := range devices {
+			if deviceResult.Error != nil {
+				fmt.Printf("Error getting device: %v", deviceResult.Error)
+				continue
+			}
 
-	// Just analyze devices based on Intune compliance data
-	devices := azClient.ListIntuneDevices(ctx, query.GraphParams{})
+			device := deviceResult.Ok
 
-	for deviceResult := range devices {
-		if deviceResult.Error != nil {
-			fmt.Printf("Error getting device: %v", deviceResult.Error)
-			continue
+			// Skip non-Windows devices
+			if !strings.Contains(strings.ToLower(device.OperatingSystem), "windows") {
+				continue
+			}
+
+			// Create analysis based on device compliance state
+			analysis := analyzeDeviceComplianceOnly(device)
+			count++
+			select {
+			case out <- analysis:
+			case <-ctx.Done():
+				return
+			}
 		}
 
-		device := deviceResult.Ok
-
-		// Skip non-Windows devices
-		if !strings.Contains(strings.ToLower(device.OperatingSystem), "windows") {
-			continue
-		}
-
-		// Create analysis based on device compliance state
-		analysis := analyzeDeviceComplianceOnly(device)
-		results = append(results, analysis)
-	}
-
-	fmt.Printf("Analyzed %d devices based on compliance data", len(results))
-	return results, nil
+		log.Info("finished collecting intune devices registry analysis based on compliance data", "count", count)
+	}()
+	return out
 }
 
 func analyzeDeviceComplianceOnly(device azure.IntuneDevice) azure.DeviceSecurityAnalysis {
